@@ -55,8 +55,10 @@ final class RecipeService {
                 "suggest-recipes",
                 options: .init(body: payload)
             )
-            let decoded = try JSONDecoder().decode(SuggestResponse.self, from: data)
-            let mapped = decoded.recipes.compactMap { $0.toRecipe() }
+            // Parse loosely — the LLM occasionally returns fields with
+            // slightly off names or types. We extract what we can and
+            // discard the rest.
+            let mapped = parseRecipes(from: data)
             if !mapped.isEmpty {
                 recipes = mapped
                 cachedKey = key
@@ -66,6 +68,95 @@ final class RecipeService {
         } catch {
             lastError = error.localizedDescription
             // Keep whatever we had before — better to show stale recipes than nothing.
+        }
+    }
+
+    /// Parses the suggest-recipes response permissively. Accepts:
+    /// - camelCase or snake_case keys
+    /// - missing fields (filled with sensible defaults)
+    /// - numeric fields delivered as strings
+    /// Returns whichever recipes parsed successfully.
+    private func parseRecipes(from data: Data) -> [Recipe] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
+        }
+        let raws = (root["recipes"] as? [Any]) ?? (root["data"] as? [Any]) ?? []
+
+        return raws.compactMap { raw -> Recipe? in
+            guard let r = raw as? [String: Any] else { return nil }
+
+            func str(_ keys: String...) -> String? {
+                for k in keys {
+                    if let v = r[k] as? String { return v }
+                    if let n = r[k] as? Double { return String(n) }
+                    if let n = r[k] as? Int    { return String(n) }
+                }
+                return nil
+            }
+            func int(_ keys: String...) -> Int? {
+                for k in keys {
+                    if let v = r[k] as? Int    { return v }
+                    if let v = r[k] as? Double { return Int(v) }
+                    if let s = r[k] as? String, let v = Int(s) { return v }
+                }
+                return nil
+            }
+            func arrStr(_ keys: String...) -> [String] {
+                for k in keys {
+                    if let arr = r[k] as? [String] { return arr }
+                    if let arr = r[k] as? [Any] {
+                        return arr.compactMap { $0 as? String }
+                    }
+                }
+                return []
+            }
+            func arrDict(_ keys: String...) -> [[String: Any]] {
+                for k in keys {
+                    if let arr = r[k] as? [[String: Any]] { return arr }
+                }
+                return []
+            }
+
+            let title = str("title", "name") ?? "Untitled recipe"
+            let slug = str("slug") ?? title
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "-")
+                .replacingOccurrences(of: ",", with: "")
+
+            let ingredientsRaw = arrDict("ingredients")
+            let ingredients = ingredientsRaw.map { ing -> RecipeIngredient in
+                let foodKey = (ing["foodKey"] as? String)
+                    ?? (ing["food_key"] as? String)
+                    ?? (ing["key"] as? String)
+                    ?? "milk"
+                return RecipeIngredient(
+                    foodKey: foodKey,
+                    name: (ing["name"] as? String) ?? "Ingredient",
+                    amount: (ing["amount"] as? String) ?? (ing["qty"] as? String) ?? "1",
+                    have: false, useSoon: false, low: false
+                )
+            }
+
+            return Recipe(
+                id: UUID(),
+                slug: slug,
+                title: title,
+                subtitle: str("subtitle", "tagline") ?? "",
+                timeMinutes: int("timeMinutes", "time_minutes", "time", "minutes") ?? 20,
+                kcal: int("kcal", "calories", "energy") ?? 400,
+                protein: int("protein", "protein_g") ?? 20,
+                carbs: int("carbs", "carbs_g") ?? 30,
+                difficulty: str("difficulty", "level") ?? "Easy",
+                matchPct: 0,
+                missing: [],
+                uses: arrStr("uses", "uses_food_keys"),
+                why: str("why", "reason") ?? "",
+                colorHex: str("colorHex", "color_hex", "color") ?? "F3D6C6",
+                accentHex: str("accentHex", "accent_hex", "accent") ?? "C9543C",
+                tags: arrStr("tags"),
+                ingredients: ingredients,
+                steps: arrStr("steps", "instructions")
+            )
         }
     }
 
@@ -91,65 +182,4 @@ final class RecipeService {
         }
     }
 
-    private struct SuggestResponse: Decodable {
-        let recipes: [LLMRecipe]
-    }
-
-    private struct LLMRecipe: Decodable {
-        let slug: String
-        let title: String
-        let subtitle: String?
-        let timeMinutes: Int
-        let kcal: Int
-        let protein: Int
-        let carbs: Int?
-        let difficulty: String
-        let uses: [String]
-        let why: String?
-        let colorHex: String
-        let accentHex: String
-        let tags: [String]
-        let ingredients: [LLMIngredient]
-        let steps: [String]
-
-        func toRecipe() -> Recipe? {
-            Recipe(
-                id: UUID(),
-                slug: slug,
-                title: title,
-                subtitle: subtitle ?? "",
-                timeMinutes: timeMinutes,
-                kcal: kcal,
-                protein: protein,
-                carbs: carbs ?? 0,
-                difficulty: difficulty,
-                matchPct: 0,                // recomputed locally via RecipeMatcher
-                missing: [],
-                uses: uses,
-                why: why ?? "",
-                colorHex: colorHex,
-                accentHex: accentHex,
-                tags: tags,
-                ingredients: ingredients.map(\.toIngredient),
-                steps: steps
-            )
-        }
-    }
-
-    private struct LLMIngredient: Decodable {
-        let foodKey: String
-        let name: String
-        let amount: String
-
-        var toIngredient: RecipeIngredient {
-            RecipeIngredient(
-                foodKey: foodKey,
-                name: name,
-                amount: amount,
-                have: false,
-                useSoon: false,
-                low: false
-            )
-        }
-    }
 }

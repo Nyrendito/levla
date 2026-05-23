@@ -117,6 +117,18 @@ final class AIScanService {
     private struct ScanItemsResponse: Decodable { let items: [LLMItem] }
     private struct BarcodeResponse: Decodable { let item: LLMItem? }
 
+    /// Robust decoder for the LLM's per-item JSON.
+    ///
+    /// The model usually returns the schema we asked for, but in practice it
+    /// occasionally returns:
+    /// - `food_key` instead of `foodKey`
+    /// - `days_left` instead of `daysLeft`
+    /// - `confidence` / `daysLeft` as strings (`"0.92"`, `"7"`) instead of numbers
+    /// - missing fields it deems "obvious"
+    ///
+    /// All of those used to throw `DecodingError`. Now we accept any of the
+    /// common variants and fall back to safe defaults so a single weird item
+    /// doesn't kill the whole scan.
     private struct LLMItem: Decodable {
         let name: String
         let foodKey: String
@@ -125,17 +137,66 @@ final class AIScanService {
         let daysLeft: Int
         let confidence: Double
 
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: DynamicKey.self)
+
+            func string(_ keys: String...) -> String? {
+                for k in keys {
+                    let key = DynamicKey(stringValue: k)
+                    if let v = try? c.decode(String.self, forKey: key) { return v }
+                    if let n = try? c.decode(Double.self, forKey: key) { return String(n) }
+                    if let n = try? c.decode(Int.self, forKey: key) { return String(n) }
+                }
+                return nil
+            }
+            func int(_ keys: String...) -> Int? {
+                for k in keys {
+                    let key = DynamicKey(stringValue: k)
+                    if let v = try? c.decode(Int.self, forKey: key) { return v }
+                    if let v = try? c.decode(Double.self, forKey: key) { return Int(v) }
+                    if let s = try? c.decode(String.self, forKey: key), let v = Int(s) { return v }
+                }
+                return nil
+            }
+            func double(_ keys: String...) -> Double? {
+                for k in keys {
+                    let key = DynamicKey(stringValue: k)
+                    if let v = try? c.decode(Double.self, forKey: key) { return v }
+                    if let v = try? c.decode(Int.self, forKey: key) { return Double(v) }
+                    if let s = try? c.decode(String.self, forKey: key), let v = Double(s) { return v }
+                }
+                return nil
+            }
+
+            name        = string("name", "title", "label") ?? "Unknown item"
+            foodKey     = string("foodKey", "food_key", "key") ?? "milk"
+            qty         = string("qty", "quantity", "amount", "size") ?? "1"
+            category    = string("category", "cat", "type") ?? "Pantry"
+            daysLeft    = int("daysLeft", "days_left", "expires_in_days", "expiry_days") ?? 7
+            confidence  = double("confidence", "score", "certainty") ?? 0.7
+        }
+
         func toCandidate() -> ScanCandidate {
             ScanCandidate(
                 foodKey: normalizedFoodKey(foodKey),
                 displayName: name,
                 qty: qty,
-                confidence: confidence,
-                category: FoodCategory(rawValue: category) ?? .pantry,
+                confidence: max(0, min(1, confidence)),
+                category: FoodCategory(rawValue: category.capitalized) ?? .pantry,
                 daysLeft: daysLeft
             )
         }
     }
+}
+
+/// JSON CodingKey that accepts any string — used by the defensive decoders
+/// so they can probe several possible field names without listing them in
+/// a static enum.
+struct DynamicKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
 }
 
 enum AIScanError: LocalizedError {
