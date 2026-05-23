@@ -149,8 +149,13 @@ private struct FridgeRecordingStage: View {
     let onDone: ([UIImage]) -> Void
 
     @State private var sampler = VideoFrameSampler()
-    @State private var didStart = false
     @State private var stopping = false
+
+    #if targetEnvironment(simulator)
+    private let isSimulator = true
+    #else
+    private let isSimulator = false
+    #endif
 
     var body: some View {
         ZStack {
@@ -171,6 +176,12 @@ private struct FridgeRecordingStage: View {
             VStack(spacing: 0) {
                 TopChrome(title: "", onClose: onClose)
 
+                if isSimulator {
+                    SimulatorWarning()
+                        .padding(.top, 8)
+                        .padding(.horizontal, 16)
+                }
+
                 // The only "you are recording" affordance — pulsing red dot + timer.
                 if sampler.isSampling {
                     RecordingPill(seconds: sampler.elapsedSeconds)
@@ -188,11 +199,7 @@ private struct FridgeRecordingStage: View {
                     .padding(.bottom, 22)
 
                 RecordButton(isRecording: sampler.isSampling) {
-                    if sampler.isSampling {
-                        finishAndSend()
-                    } else if sampler.sampledFrames.count < sampler.maxFrames {
-                        sampler.startSampling()
-                    }
+                    handleTap()
                 }
                 .padding(.bottom, 36)
             }
@@ -200,8 +207,11 @@ private struct FridgeRecordingStage: View {
         .task {
             await sampler.requestAccess()
             await sampler.start()
-            // The user wants this to feel like recording — don't auto-start.
-            // They tap the big red button to begin.
+            // Auto-ship the moment the sampler hits maxFrames so the user
+            // never lands in a "stopped, now what?" state.
+            sampler.onAutoComplete = {
+                finishAndSend()
+            }
         }
         .onDisappear { sampler.stop() }
         .animation(.spring(response: 0.32, dampingFraction: 0.78), value: sampler.isSampling)
@@ -212,12 +222,27 @@ private struct FridgeRecordingStage: View {
             return "Analyzing your fridge…"
         }
         if !sampler.isSampling {
-            return "Tap to record. Slowly sweep your fridge — shelves and drawers."
-        }
-        if sampler.sampledFrames.count >= sampler.maxFrames {
-            return "Got enough — tap to finish."
+            if sampler.sampledFrames.isEmpty {
+                return "Tap to record. Slowly sweep your fridge — shelves and drawers."
+            } else {
+                return "Tap to send what you've got."
+            }
         }
         return "Recording. Sweep slowly — Levla's watching."
+    }
+
+    /// One unified tap handler so we never hit a dead-button state:
+    /// - sampling now            → stop & send
+    /// - stopped, have frames    → send what we've got
+    /// - stopped, no frames      → start a fresh recording
+    private func handleTap() {
+        if sampler.isSampling {
+            finishAndSend()
+        } else if !sampler.sampledFrames.isEmpty {
+            finishAndSend()
+        } else {
+            sampler.startSampling()
+        }
     }
 
     private func finishAndSend() {
@@ -228,6 +253,25 @@ private struct FridgeRecordingStage: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             onDone(sampler.sampledFrames)
         }
+    }
+}
+
+/// Shown only when running in the iOS Simulator — explains why the camera
+/// preview is black and frames aren't being captured.
+private struct SimulatorWarning: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            LSymbol(key: "bolt", size: 14, weight: .heavy).foregroundStyle(L.sun)
+            Text("Simulator has no camera — run on a real device to scan.")
+                .font(.manrope(12, .heavy))
+                .kerning(-0.1)
+                .foregroundStyle(L.cream)
+                .multilineTextAlignment(.leading)
+            Spacer()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(L.sun.opacity(0.4), lineWidth: 0.5))
     }
 }
 

@@ -43,6 +43,12 @@ final class VideoFrameSampler: NSObject {
     private var elapsedTimer: Timer?
     private var startedAt: Date?
 
+    /// Fires once when sampling stops on its own (because we hit `maxFrames`).
+    /// The recording UI uses this to auto-finish without requiring a second
+    /// tap from the user — they shouldn't be left staring at a stopped UI
+    /// wondering what to do next.
+    var onAutoComplete: (() -> Void)?
+
     var captureSession: AVCaptureSession { session }
 
     // MARK: - Session lifecycle
@@ -157,7 +163,10 @@ final class VideoFrameSampler: NSObject {
         guard sampledFrames.count < maxFrames else { stopSampling(); return }
         guard let cg = latestCGImage else { return }
         sampledFrames.append(UIImage(cgImage: cg))
-        if sampledFrames.count >= maxFrames { stopSampling() }
+        if sampledFrames.count >= maxFrames {
+            stopSampling()
+            onAutoComplete?()
+        }
     }
 }
 
