@@ -37,18 +37,24 @@ final class AuthService {
             return
         }
 
-        // `auth.session` throws when there's no session OR when the stored
-        // session is invalid (e.g. a stale "pending-confirmation" user). In
-        // either case we want the user back on the welcome screen so they
-        // get a fresh, real, signed-in session next time.
-        let session = try? await supabase.client?.auth.session
-        if let session, !session.accessToken.isEmpty {
-            let user = session.user
-            state = .signedIn(userId: user.id, email: user.email)
-            try? await loadProfile()
-        } else {
-            // Wipe any half-broken persisted state so the next sign-in starts clean.
-            try? await supabase.client?.auth.signOut()
+        // `auth.session` returns the current session (auto-refreshing if the
+        // access token is stale) and throws only when there's no session at
+        // all. Treat that as signed-out — but do NOT call signOut() here,
+        // because that would wipe the Keychain entry on any transient
+        // refresh hiccup and force re-login on next launch.
+        do {
+            let session = try await supabase.client?.auth.session
+            if let session, !session.accessToken.isEmpty {
+                let user = session.user
+                state = .signedIn(userId: user.id, email: user.email)
+                try? await loadProfile()
+            } else {
+                state = .signedOut
+            }
+        } catch {
+            // No session stored, or a transient error reading it. Either way,
+            // route to the welcome screen — the persisted session, if any,
+            // stays intact for next time.
             state = .signedOut
         }
     }
