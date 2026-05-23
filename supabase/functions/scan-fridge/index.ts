@@ -81,7 +81,9 @@ Deno.serve(async (req: Request) => {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        // gpt-4o-mini: vision-capable, available on standard OpenAI tiers,
+        // and ~6× cheaper than gpt-4o. Plenty good for shelf-by-shelf food ID.
+        model: "gpt-4o-mini",
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [
