@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import Auth
 import AuthenticationServices
 
 /// Auth state — driven by Supabase auth (when configured) or a local mock.
@@ -61,8 +62,17 @@ final class AuthService {
             data: ["display_name": .string(displayName)]
         )
         let user = response.user
-        state = .signedIn(userId: user.id, email: user.email)
-        try? await loadProfile()
+
+        // If Supabase requires email confirmation, signUp returns a user with
+        // no active session — surface that to the UI instead of pretending
+        // they're logged in (which would 401 on every backend call).
+        do {
+            _ = try await client.auth.session
+            state = .signedIn(userId: user.id, email: user.email)
+            try? await loadProfile()
+        } catch {
+            throw AuthError.emailConfirmationRequired
+        }
     }
 
     func signIn(email: String, password: String) async throws {
@@ -77,6 +87,25 @@ final class AuthService {
         guard let client = supabase.client else { return }
         let session = try await client.auth.signInWithIdToken(
             credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
+        )
+        let user = session.user
+        state = .signedIn(userId: user.id, email: user.email)
+        try? await loadProfile()
+    }
+
+    /// Sign in via Supabase's hosted OAuth flow + ASWebAuthenticationSession.
+    /// Works for any Supabase-supported provider (google, apple, github, …).
+    /// Needs the provider enabled & configured in Supabase Auth → Providers.
+    func signInWithOAuth(provider: OAuthProvider) async throws {
+        guard let client = supabase.client else { return }
+
+        let redirectURL = URL(string: "levla://login-callback")!
+        let session = try await client.auth.signInWithOAuth(
+            provider: provider.supabaseProvider,
+            redirectTo: redirectURL,
+            launchFlow: { url in
+                try await OAuthPresenter.shared.openCallback(url: url, callbackScheme: "levla")
+            }
         )
         let user = session.user
         state = .signedIn(userId: user.id, email: user.email)
@@ -101,5 +130,35 @@ final class AuthService {
             .execute()
             .value
         profile = row
+    }
+}
+
+enum AuthError: LocalizedError {
+    case emailConfirmationRequired
+    var errorDescription: String? {
+        switch self {
+        case .emailConfirmationRequired:
+            return "Check your inbox — confirm the email we just sent, then sign in."
+        }
+    }
+}
+
+/// The OAuth providers exposed in the welcome screen. Mapped to Supabase
+/// `Provider` at the call site.
+enum OAuthProvider {
+    case google, apple
+
+    var supabaseProvider: Provider {
+        switch self {
+        case .google: return .google
+        case .apple:  return .apple
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .google: return "Google"
+        case .apple:  return "Apple"
+        }
     }
 }

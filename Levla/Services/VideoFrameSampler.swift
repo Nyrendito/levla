@@ -29,10 +29,12 @@ final class VideoFrameSampler: NSObject {
 
     // MARK: - Tuning
 
-    /// Time between samples while recording.
-    var sampleInterval: TimeInterval = 1.5
-    /// Hard cap on frames sent to the model. 8 × 1024px JPEGs ≈ 1.6 MB on the wire.
-    var maxFrames: Int = 8
+    /// Time between samples while recording. Long enough to give the user
+    /// time to open a drawer / move to the next shelf, short enough that a
+    /// ~15 s sweep produces 5-6 distinct frames.
+    var sampleInterval: TimeInterval = 3.0
+    /// Hard cap on frames sent to the model. 6 × 1024px JPEGs ≈ 1.2 MB on the wire.
+    var maxFrames: Int = 6
 
     // MARK: - Private
 

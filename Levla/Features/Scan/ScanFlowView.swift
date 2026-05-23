@@ -60,7 +60,10 @@ struct ScanFlowView: View {
     // MARK: - AI dispatchers
 
     private func runFridgeAI(_ images: [UIImage]) {
-        guard !images.isEmpty else { phase = .error("No frames captured. Try again."); return }
+        guard !images.isEmpty else {
+            phase = .error("No frames captured — try recording again.")
+            return
+        }
         phase = .identifying
         Task {
             do {
@@ -147,6 +150,7 @@ private struct FridgeRecordingStage: View {
 
     @State private var sampler = VideoFrameSampler()
     @State private var didStart = false
+    @State private var stopping = false
 
     var body: some View {
         ZStack {
@@ -156,103 +160,73 @@ private struct FridgeRecordingStage: View {
                 CameraPermissionMessage()
             }
 
+            // Subtle scrim so the red dot + close button stay legible.
+            LinearGradient(
+                colors: [Color.black.opacity(0.45), .clear, .clear, Color.black.opacity(0.55)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
             VStack(spacing: 0) {
-                TopChrome(title: "Scan fridge", onClose: onClose)
+                TopChrome(title: "", onClose: onClose)
+
+                // The only "you are recording" affordance — pulsing red dot + timer.
                 if sampler.isSampling {
-                    RecordingPill(seconds: sampler.elapsedSeconds, frames: sampler.sampledFrames.count, cap: sampler.maxFrames)
-                        .padding(.top, 12)
+                    RecordingPill(seconds: sampler.elapsedSeconds)
+                        .padding(.top, 10)
+                        .transition(.scale.combined(with: .opacity))
                 }
+
                 Spacer()
 
-                VStack(spacing: 14) {
-                    if !sampler.sampledFrames.isEmpty {
-                        FrameStrip(frames: sampler.sampledFrames) { idx in
-                            sampler.removeFrame(at: idx)
-                        }
-                        .padding(.horizontal, 18)
+                Text(helperText)
+                    .font(.manrope(15, .bold))
+                    .foregroundStyle(L.cream.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 22)
+
+                RecordButton(isRecording: sampler.isSampling) {
+                    if sampler.isSampling {
+                        finishAndSend()
+                    } else if sampler.sampledFrames.count < sampler.maxFrames {
+                        sampler.startSampling()
                     }
-
-                    HelperBanner(text: helperText)
-                        .padding(.horizontal, 22)
-
-                    bottomControls
-                        .padding(.horizontal, 36)
-                        .padding(.bottom, 30)
                 }
+                .padding(.bottom, 36)
             }
-            ViewfinderCorners().padding(60)
         }
         .task {
             await sampler.requestAccess()
             await sampler.start()
-            // Auto-start "recording" the moment the user lands here.
-            if !didStart {
-                didStart = true
-                // Brief delay so the user sees the viewfinder before the timer ticks.
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                sampler.startSampling()
-            }
+            // The user wants this to feel like recording — don't auto-start.
+            // They tap the big red button to begin.
         }
         .onDisappear { sampler.stop() }
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: sampler.isSampling)
     }
 
     private var helperText: String {
-        if sampler.isSampling {
-            return sampler.sampledFrames.isEmpty
-                ? "Slowly sweep across your fridge — shelf by shelf."
-                : "Keep going. Levla's grabbing a frame every couple of seconds."
+        if stopping {
+            return "Analyzing your fridge…"
         }
-        if sampler.sampledFrames.isEmpty {
-            return "Ready when you are. Tap record to start sweeping."
+        if !sampler.isSampling {
+            return "Tap to record. Slowly sweep your fridge — shelves and drawers."
         }
         if sampler.sampledFrames.count >= sampler.maxFrames {
-            return "Got enough. Hit Done — Levla takes it from here."
+            return "Got enough — tap to finish."
         }
-        return "Paused. Restart to capture more, or hit Done."
+        return "Recording. Sweep slowly — Levla's watching."
     }
 
-    @ViewBuilder
-    private var bottomControls: some View {
-        HStack {
-            // Re-shoot
-            Button {
-                sampler.reset()
-            } label: {
-                Text("Reset")
-                    .font(.manrope(13, .heavy))
-                    .padding(.horizontal, 14)
-                    .frame(height: 44)
-                    .background(L.cream.opacity(0.10), in: Capsule())
-                    .foregroundStyle(L.cream)
-            }
-            .buttonStyle(.plain)
-            .opacity(sampler.sampledFrames.isEmpty && !sampler.isSampling ? 0 : 1)
-
-            Spacer()
-
-            RecordButton(isRecording: sampler.isSampling) {
-                if sampler.isSampling {
-                    sampler.stopSampling()
-                } else if sampler.sampledFrames.count < sampler.maxFrames {
-                    sampler.startSampling()
-                }
-            }
-
-            Spacer()
-
-            Button {
-                sampler.stopSampling()
-                onDone(sampler.sampledFrames)
-            } label: {
-                Text("Done")
-                    .font(.manrope(14, .heavy))
-                    .padding(.horizontal, 14)
-                    .frame(height: 44)
-                    .background(sampler.sampledFrames.isEmpty ? L.cream.opacity(0.10) : L.pop, in: Capsule())
-                    .foregroundStyle(sampler.sampledFrames.isEmpty ? L.cream.opacity(0.4) : L.cream)
-            }
-            .buttonStyle(.plain)
-            .disabled(sampler.sampledFrames.isEmpty)
+    private func finishAndSend() {
+        guard !stopping else { return }
+        stopping = true
+        sampler.stopSampling()
+        // Tiny pause so the model has the very last frame in the buffer.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            onDone(sampler.sampledFrames)
         }
     }
 }
@@ -287,72 +261,32 @@ private struct RecordButton: View {
     }
 }
 
+/// Just a red dot + elapsed timer — no frame counter, no thumbnails.
+/// Looks like a standard video-recording indicator.
 private struct RecordingPill: View {
     let seconds: Double
-    let frames: Int
-    let cap: Int
-
     @State private var blink = false
 
     var body: some View {
         HStack(spacing: 10) {
             Circle()
                 .fill(Color(hex: 0xE53935))
-                .frame(width: 9, height: 9)
-                .opacity(blink ? 0.3 : 1.0)
-                .animation(.easeInOut(duration: 0.6).repeatForever(), value: blink)
+                .frame(width: 10, height: 10)
+                .opacity(blink ? 0.35 : 1.0)
+                .animation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true), value: blink)
                 .onAppear { blink = true }
             Text(timeString)
-                .font(.mono(13))
+                .font(.mono(14))
                 .foregroundStyle(L.cream)
-            Rectangle().fill(L.cream.opacity(0.25)).frame(width: 1, height: 14)
-            Text("\(frames)/\(cap) frames")
-                .font(.manrope(12, .heavy))
-                .foregroundStyle(L.cream.opacity(0.85))
         }
-        .padding(.horizontal, 12).padding(.vertical, 7)
-        .background(Color(hex: 0x0F0C08).opacity(0.7), in: Capsule())
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(Color.black.opacity(0.5), in: Capsule())
+        .overlay(Capsule().stroke(L.cream.opacity(0.15), lineWidth: 0.5))
     }
 
     private var timeString: String {
         let s = Int(seconds)
         return String(format: "%02d:%02d", s / 60, s % 60)
-    }
-}
-
-private struct FrameStrip: View {
-    let frames: [UIImage]
-    let onRemove: (Int) -> Void
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(frames.enumerated()), id: \.offset) { (i, img) in
-                    ZStack(alignment: .topTrailing) {
-                        Image(uiImage: img)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 60, height: 60)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(L.cream.opacity(0.25), lineWidth: 1)
-                            )
-                            .transition(.scale.combined(with: .opacity))
-                        Button { onRemove(i) } label: {
-                            ZStack {
-                                Circle().fill(L.ink)
-                                LSymbol(key: "close", size: 10, weight: .heavy).foregroundStyle(L.cream)
-                            }
-                            .frame(width: 18, height: 18)
-                        }
-                        .buttonStyle(.plain)
-                        .offset(x: 4, y: -4)
-                    }
-                }
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: frames.count)
     }
 }
 

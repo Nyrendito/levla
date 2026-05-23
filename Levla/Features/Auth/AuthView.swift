@@ -127,11 +127,30 @@ struct AuthView: View {
             .padding(.horizontal, L.S.pad)
             .padding(.top, 10)
 
-            BigCTA(title: "Get Started", icon: nil, kind: .primary) {
-                withAnimation { mode = .signUp }
+            VStack(spacing: 10) {
+                AppleSignInButton {
+                    runOAuth(.apple)
+                }
+                GoogleSignInButton {
+                    runOAuth(.google)
+                }
+                BigCTA(title: "Continue with email", icon: nil, kind: .light) {
+                    withAnimation { mode = .signUp }
+                }
             }
             .padding(.horizontal, L.S.pad)
             .padding(.top, 22)
+            .opacity(loading ? 0.5 : 1)
+            .disabled(loading)
+
+            if let error {
+                Text(error)
+                    .font(.manrope(12.5, .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(L.rose)
+                    .padding(.horizontal, L.S.pad)
+                    .padding(.top, 10)
+            }
 
             Button {
                 withAnimation { mode = .signIn }
@@ -148,6 +167,29 @@ struct AuthView: View {
             .padding(.top, 14)
             .padding(.bottom, 28)
             .buttonStyle(.plain)
+        }
+    }
+
+    private func runOAuth(_ provider: OAuthProvider) {
+        guard !loading else { return }
+        if app.auth.isOfflineMode {
+            error = "Connect Supabase first (see README) to use \(provider.displayName) sign-in."
+            return
+        }
+        loading = true
+        error = nil
+        Task {
+            do {
+                try await app.auth.signInWithOAuth(provider: provider)
+                await app.refreshForUser()
+            } catch {
+                if case OAuthError.cancelled = error {
+                    // user backed out — no need to surface anything
+                } else {
+                    self.error = error.localizedDescription
+                }
+            }
+            loading = false
         }
     }
 
@@ -368,4 +410,106 @@ private func sha256(_ input: String) -> String {
     let inputData = Data(input.utf8)
     let hashed = SHA256.hash(data: inputData)
     return hashed.compactMap { String(format: "%02x", $0) }.joined()
+}
+
+// MARK: - Apple / Google branded buttons
+
+private struct AppleSignInButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "apple.logo")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(L.cream)
+                Text("Continue with Apple")
+                    .font(.manrope(17, .heavy))
+                    .kerning(-0.3)
+                    .foregroundStyle(L.cream)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: L.btnHeight)
+            .background(L.ink, in: RoundedRectangle(cornerRadius: L.R.xl, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .modifier(_OAuthShadow())
+        .tapPress()
+    }
+}
+
+private struct GoogleSignInButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                GoogleGMark().frame(width: 22, height: 22)
+                Text("Continue with Google")
+                    .font(.manrope(17, .heavy))
+                    .kerning(-0.3)
+                    .foregroundStyle(L.ink)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: L.btnHeight)
+            .background(.white, in: RoundedRectangle(cornerRadius: L.R.xl, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: L.R.xl, style: .continuous)
+                    .stroke(L.ink.opacity(0.10), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .modifier(_OAuthShadow())
+        .tapPress()
+    }
+}
+
+/// Simplified Google "G" mark — four quadrant arcs in red / yellow / green / blue
+/// plus the horizontal bar. Drawn at runtime so we don't ship any third-party logo.
+private struct GoogleGMark: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width, h = size.height
+            let r = min(w, h) / 2
+            let lineWidth = r * 0.42
+            let outerRect = CGRect(x: (w - r * 2) / 2 + lineWidth / 2,
+                                   y: (h - r * 2) / 2 + lineWidth / 2,
+                                   width: r * 2 - lineWidth,
+                                   height: r * 2 - lineWidth)
+
+            // Quadrant arcs (Google's four brand colors)
+            ctx.stroke(arc(in: outerRect, start: -90, end: 0),  with: .color(Color(red: 0.918, green: 0.263, blue: 0.208)), lineWidth: lineWidth)        // red (top)
+            ctx.stroke(arc(in: outerRect, start: 0,   end: 90), with: .color(Color(red: 0.984, green: 0.737, blue: 0.020)), lineWidth: lineWidth)        // yellow (right)
+            ctx.stroke(arc(in: outerRect, start: 90,  end: 180),with: .color(Color(red: 0.204, green: 0.659, blue: 0.325)), lineWidth: lineWidth)        // green (bottom)
+            ctx.stroke(arc(in: outerRect, start: 180, end: 270),with: .color(Color(red: 0.259, green: 0.522, blue: 0.957)), lineWidth: lineWidth)        // blue (left)
+
+            // Inner notch on the right + horizontal bar (the "G" opening)
+            let barHeight = lineWidth * 0.9
+            let barY = h / 2 - barHeight / 2
+            let barX = w / 2
+            let barWidth = r - lineWidth * 0.4
+            let barRect = CGRect(x: barX, y: barY, width: barWidth, height: barHeight)
+            ctx.fill(Path(roundedRect: barRect, cornerRadius: barHeight / 2),
+                     with: .color(Color(red: 0.259, green: 0.522, blue: 0.957)))
+
+            // Clear out the right side so the "G" reads as open
+            let notch = CGRect(x: w - lineWidth * 0.6, y: 0, width: lineWidth * 0.6, height: h / 2 - barHeight / 2)
+            ctx.fill(Path(notch), with: .color(Color.white))
+        }
+    }
+
+    private func arc(in rect: CGRect, start: Double, end: Double) -> Path {
+        Path { p in
+            p.addArc(center: CGPoint(x: rect.midX, y: rect.midY),
+                     radius: rect.width / 2,
+                     startAngle: .degrees(start),
+                     endAngle: .degrees(end),
+                     clockwise: false)
+        }
+    }
+}
+
+private struct _OAuthShadow: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: L.ink.opacity(0.10), radius: 10, x: 0, y: 4)
+    }
 }

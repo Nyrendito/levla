@@ -50,6 +50,11 @@ targets:
         NSMicrophoneUsageDescription: "Levla uses the microphone for voice-adding items to your fridge."
         SUPABASE_URL: "https://cinsozlrpmqbbalivxza.supabase.co"
         SUPABASE_ANON_KEY: "sb_publishable_Lrr1Qfif0PdwkVFGavLghA_kcv3JJuj"
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: app.levla.oauth
+            CFBundleURLSchemes:
+              - levla
         UIAppFonts:
           - Manrope-Variable.ttf
           - JetBrainsMono-Medium.ttf

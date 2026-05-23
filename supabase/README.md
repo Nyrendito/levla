@@ -64,6 +64,56 @@ All three functions require a valid user session JWT (the default Edge Function
 auth setting). If the app is in offline-demo mode, the client falls back to
 local-only behavior — see [`AIScanService.swift`](../Levla/Services/AIScanService.swift).
 
+## Email confirmation
+
+Supabase's email/password auth ships with **email confirmation required** by default. If you sign up via the iOS app while that's on, you'll get a user row with `email_confirmed_at = null` and **no session JWT** — every subsequent backend call returns 401 (including the scan-fridge function).
+
+Two ways to handle it:
+
+**A. Recommended for development — turn it off:**
+Supabase dashboard → **Authentication → Sign In / Up → Email** → toggle off **Confirm email** → Save. Sign-up now logs you in immediately.
+
+**B. Keep it on (production behavior):**
+Sign up → check inbox → click the confirmation link → return to the app → tap "Already have an account? Sign in" with the same credentials.
+
+If you already have a stuck unconfirmed user, force-confirm them with:
+
+```sql
+update auth.users
+set email_confirmed_at = now()
+where email = 'YOUR_EMAIL' and email_confirmed_at is null;
+```
+
+## OAuth providers (Continue with Google / Apple)
+
+The iOS app's welcome screen offers Sign in with **Google** and **Apple** via Supabase's hosted OAuth flow + `ASWebAuthenticationSession`. The redirect URL the app expects is `levla://login-callback` — already registered in the Info.plist via `project.yml`.
+
+### Google
+
+1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → create / select a project.
+2. **Credentials → Create credentials → OAuth client ID** → application type **Web application** (NOT iOS — Supabase handles the callback).
+3. **Authorized redirect URIs** → add:
+   ```
+   https://cinsozlrpmqbbalivxza.supabase.co/auth/v1/callback
+   ```
+4. Copy the **Client ID** and **Client secret**.
+5. In Supabase dashboard → **Authentication → Providers → Google** → enable, paste both, save.
+6. Add `levla://login-callback` to **Authentication → URL Configuration → Redirect URLs** (so Supabase will redirect back to the iOS app after the Google callback completes).
+
+That's it. Tap **Continue with Google** in the app and it opens an in-app Safari sheet with Google's consent screen.
+
+### Apple
+
+Sign in with Apple via Supabase requires the **paid Apple Developer Program** ($99/yr) because Apple's Service ID setup lives behind it.
+
+1. [developer.apple.com](https://developer.apple.com) → **Certificates, IDs & Profiles → Identifiers** → register a **Services ID** (e.g. `app.levla.signin`).
+2. On the Services ID → enable **Sign in with Apple** → configure → Primary App ID = your iOS app's bundle ID (`com.nyrendito.levla`) → Web Domain = `cinsozlrpmqbbalivxza.supabase.co` → Return URL = `https://cinsozlrpmqbbalivxza.supabase.co/auth/v1/callback`.
+3. **Keys** → create a new **Sign in with Apple** key, download the `.p8`.
+4. In Supabase dashboard → **Authentication → Providers → Apple** → enable → paste **Services ID**, **Team ID**, **Key ID**, and the contents of the `.p8`.
+5. Add `levla://login-callback` to **Authentication → URL Configuration → Redirect URLs**.
+
+Until that's all set up, the **Continue with Apple** button will surface a Supabase error when tapped — Google works independently.
+
 ## Cost notes
 
 Per [OpenAI pricing](https://openai.com/api/pricing/) at the time of writing:
