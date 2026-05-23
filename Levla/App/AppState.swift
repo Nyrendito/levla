@@ -9,6 +9,7 @@ final class AppState {
     let auth = AuthService()
     let fridge = FridgeService()
     let shopping = ShoppingService()
+    let recipes = RecipeService()
 
     var selectedTab: MainTab = .home
     var presentingScan: ScanKind? = nil
@@ -20,6 +21,7 @@ final class AppState {
             async let f: Void = fridge.reload(userId: uid)
             async let s: Void = shopping.reload(userId: uid)
             _ = await (f, s)
+            await recipes.reload(for: fridge.items)
         }
     }
 
@@ -28,6 +30,13 @@ final class AppState {
         async let f: Void = fridge.reload(userId: uid)
         async let s: Void = shopping.reload(userId: uid)
         _ = await (f, s)
+        await recipes.reload(for: fridge.items)
+    }
+
+    /// Called after a scan adds items — refresh shopping & recipe suggestions
+    /// since both depend on the current fridge.
+    func refreshAfterFridgeChange() async {
+        await recipes.reload(for: fridge.items)
     }
 }
 

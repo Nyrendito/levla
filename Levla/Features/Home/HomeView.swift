@@ -9,7 +9,7 @@ struct HomeView: View {
     @State private var openedRecipe: Recipe?
 
     private var cookable: [RecipeMatch] {
-        Array(RecipeMatcher.rank(recipes: SeedData.recipes, fridge: app.fridge.items).prefix(3))
+        Array(RecipeMatcher.rank(recipes: app.recipes.recipes, fridge: app.fridge.items).prefix(3))
     }
 
     private var recent: [FoodItem] {
@@ -41,7 +41,7 @@ struct HomeView: View {
                     today: app.fridge.todayCount,
                     soon: app.fridge.soonCount,
                     low: app.fridge.lowCount,
-                    score: app.auth.profile?.fridgeScore ?? 8
+                    score: app.fridge.fridgeScore
                 )
                 .padding(.top, 24)
 
@@ -67,6 +67,7 @@ struct HomeView: View {
             if let uid = app.auth.currentUserId, app.fridge.items.isEmpty {
                 await app.fridge.reload(userId: uid)
             }
+            await app.recipes.reload(for: app.fridge.items)
         }
     }
 
@@ -82,7 +83,7 @@ struct HomeView: View {
                     .foregroundStyle(L.ink)
             }
             Spacer()
-            StreakPill(days: app.auth.profile?.streakDays ?? 5)
+            StreakPill(days: app.fridge.streakDays)
         }
     }
 
@@ -436,7 +437,9 @@ private struct MiniStat: View {
 }
 
 private struct ScoreCard: View {
+    @Environment(AppState.self) private var app
     let score: Int
+
     var body: some View {
         let pct = Double(score) / 10.0
         let barColor: Color = score >= 8 ? L.mint : (score >= 5 ? L.sun : L.rose)
@@ -459,7 +462,7 @@ private struct ScoreCard: View {
                 }
             }
             .frame(height: 8)
-            Text("Well stocked, low waste. Two greens are turning — cook them in the next two days to keep your score perfect.")
+            Text(rationale)
                 .font(.manrope(13.5, .medium))
                 .lineSpacing(3)
                 .foregroundStyle(L.ink.opacity(0.55))
@@ -468,6 +471,22 @@ private struct ScoreCard: View {
         .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .modifier(_HomeCardShadow())
+    }
+
+    private var rationale: String {
+        if app.fridge.total == 0 {
+            return "Empty fridge. Scan it and Levla will start tracking your score."
+        }
+        if app.fridge.todayCount > 0 {
+            return "\(app.fridge.todayCount) item\(app.fridge.todayCount == 1 ? "" : "s") need\(app.fridge.todayCount == 1 ? "s" : "") cooking today — pull up a recipe."
+        }
+        if app.fridge.soonCount > 0 {
+            return "\(app.fridge.soonCount) item\(app.fridge.soonCount == 1 ? "" : "s") turning this week. Cook them soon to keep your score up."
+        }
+        if app.fridge.lowCount > 0 {
+            return "Stock looks fresh but \(app.fridge.lowCount) item\(app.fridge.lowCount == 1 ? "" : "s") running low — top up soon."
+        }
+        return "Well stocked, low waste. Keep cooking with what you have."
     }
 }
 

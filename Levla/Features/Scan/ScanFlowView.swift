@@ -132,7 +132,10 @@ struct ScanFlowView: View {
             )
         }
         if !items.isEmpty {
-            Task { await app.fridge.add(items) }
+            Task {
+                await app.fridge.add(items)
+                await app.refreshAfterFridgeChange()
+            }
         }
         onClose()
     }

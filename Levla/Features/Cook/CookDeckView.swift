@@ -13,7 +13,7 @@ struct CookDeckView: View {
     @State private var animating = false
 
     private var source: [RecipeMatch] {
-        RecipeMatcher.rank(recipes: SeedData.recipes, fridge: app.fridge.items)
+        RecipeMatcher.rank(recipes: app.recipes.recipes, fridge: app.fridge.items)
     }
 
     var body: some View {
@@ -51,6 +51,9 @@ struct CookDeckView: View {
         }
         .sheet(item: $openedRecipe) { r in
             RecipeDetailView(recipe: r) { openedRecipe = nil }
+        }
+        .task {
+            await app.recipes.reload(for: app.fridge.items)
         }
     }
 

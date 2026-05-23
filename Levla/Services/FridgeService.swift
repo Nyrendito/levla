@@ -23,6 +23,24 @@ final class FridgeService {
 
     var freshPct: Double { total == 0 ? 0 : Double(freshCount) / Double(total) }
 
+    /// 0–10 score that responds to fridge state. Driven entirely by what's
+    /// currently in `items` — no DB column needed.
+    var fridgeScore: Int {
+        guard total > 0 else { return 5 }
+        // Cost 2 per expiring-today item; 1 per expiring-soon; 0.5 per low.
+        let penalty = Double(todayCount) * 2.0 + Double(soonCount) * 1.0 + Double(lowCount) * 0.5
+        let raw = 10.0 - min(10.0, penalty)
+        return max(0, min(10, Int(raw.rounded())))
+    }
+
+    /// Number of distinct calendar days the user has added items on.
+    /// Approximates "you've been active this many days" — caps at 99.
+    var streakDays: Int {
+        let cal = Calendar.current
+        let days = Set(items.map { cal.startOfDay(for: $0.addedAt) })
+        return min(99, days.count)
+    }
+
     func reload(userId: UUID) async {
         isLoading = true
         defer { isLoading = false }
