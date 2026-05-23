@@ -135,7 +135,9 @@ struct AuthView: View {
                     runOAuth(.google)
                 }
                 BigCTA(title: "Continue with email", icon: nil, kind: .light) {
-                    withAnimation { mode = .signUp }
+                    // Default to Sign In — most "Continue with email" taps come from
+                    // returning users. New users get the "Create one" link inside.
+                    withAnimation { mode = .signIn }
                 }
             }
             .padding(.horizontal, L.S.pad)
@@ -153,12 +155,12 @@ struct AuthView: View {
             }
 
             Button {
-                withAnimation { mode = .signIn }
+                withAnimation { mode = .signUp }
             } label: {
                 HStack(spacing: 4) {
-                    Text("Already have an account?")
+                    Text("Don't have an account?")
                         .foregroundStyle(L.ink.opacity(0.6))
-                    Text("Sign in")
+                    Text("Sign up")
                         .foregroundStyle(L.ink)
                 }
                 .font(.manrope(14, .heavy))

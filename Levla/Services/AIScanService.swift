@@ -24,6 +24,7 @@ final class AIScanService {
         }
 
         guard let client = supabase.client else { return [] }
+        try await requireSession(client: client)
 
         let dataURIs = images.compactMap { uiImage -> String? in
             guard let jpeg = jpegResized(uiImage, maxEdge: 1024, quality: 0.7) else { return nil }
@@ -59,6 +60,7 @@ final class AIScanService {
         }
 
         guard let client = supabase.client else { return [] }
+        try await requireSession(client: client)
 
         let payload = ReceiptScanRequest(text: text)
         let data: Data = try await client.functions.invoke(
@@ -82,6 +84,7 @@ final class AIScanService {
             )
         }
         guard let client = supabase.client else { return nil }
+        try await requireSession(client: client)
 
         let payload = BarcodeRequest(code: code)
         let data: Data = try await client.functions.invoke(
@@ -90,6 +93,19 @@ final class AIScanService {
         )
         let decoded = try JSONDecoder().decode(BarcodeResponse.self, from: data)
         return decoded.item?.toCandidate()
+    }
+
+    // MARK: - Session guard
+
+    /// Bail out early with a clear error if there's no valid session JWT.
+    /// Without this, the function would still be invoked, hit the verify_jwt
+    /// gateway, and return 401 — which surfaces in iOS as the cryptic
+    /// "non-2xx status code 401" string.
+    private func requireSession(client: SupabaseClient) async throws {
+        if let session = try? await client.auth.session, !session.accessToken.isEmpty {
+            return
+        }
+        throw AIScanError.notSignedIn
     }
 
     // MARK: - Wire types
@@ -118,6 +134,16 @@ final class AIScanService {
                 category: FoodCategory(rawValue: category) ?? .pantry,
                 daysLeft: daysLeft
             )
+        }
+    }
+}
+
+enum AIScanError: LocalizedError {
+    case notSignedIn
+    var errorDescription: String? {
+        switch self {
+        case .notSignedIn:
+            return "Sign in first — Levla needs a session to talk to the AI."
         }
     }
 }

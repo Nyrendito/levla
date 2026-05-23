@@ -37,18 +37,31 @@ final class AuthService {
             return
         }
 
-        do {
-            let session = try await supabase.client?.auth.session
-            if let session {
-                let user = session.user
-                state = .signedIn(userId: user.id, email: user.email)
-                try? await loadProfile()
-            } else {
-                state = .signedOut
-            }
-        } catch {
+        // `auth.session` throws when there's no session OR when the stored
+        // session is invalid (e.g. a stale "pending-confirmation" user). In
+        // either case we want the user back on the welcome screen so they
+        // get a fresh, real, signed-in session next time.
+        let session = try? await supabase.client?.auth.session
+        if let session, !session.accessToken.isEmpty {
+            let user = session.user
+            state = .signedIn(userId: user.id, email: user.email)
+            try? await loadProfile()
+        } else {
+            // Wipe any half-broken persisted state so the next sign-in starts clean.
+            try? await supabase.client?.auth.signOut()
             state = .signedOut
         }
+    }
+
+    /// True iff there's a real session with a non-empty access token.
+    /// Backend calls should bail out early if this is false — saves a round
+    /// trip and surfaces a clear error to the UI.
+    func hasActiveSession() async -> Bool {
+        guard let client = supabase.client else { return false }
+        if let session = try? await client.auth.session, !session.accessToken.isEmpty {
+            return true
+        }
+        return false
     }
 
     func signUp(email: String, password: String, displayName: String) async throws {
