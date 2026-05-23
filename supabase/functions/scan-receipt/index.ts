@@ -1,51 +1,25 @@
-// supabase/functions/scan-receipt — GPT-4.1-mini receipt parser
-//
-// The iOS app runs Apple Vision OCR locally and ships the raw text up here.
-// We turn it into a structured list of food items.
+// supabase/functions/scan-receipt — GPT-4.1-mini receipt parser w/ strict schema
 //
 // Body: { text: "DANONE SKYR 0%  2.49\nCHICKEN BREAST 6.80\n..." }
 // Returns: { items: [{ name, foodKey, qty, category, daysLeft, confidence }, ...] }
 
-import { corsHeaders, json } from "../_shared/cors.ts";
+import { corsHeaders, json } from "./_shared/cors.ts";
+import { itemsSchema, strictSchema, FOOD_KEYS, CATEGORIES } from "./_shared/schemas.ts";
 
 const SYSTEM_PROMPT = `You are Levla's receipt parser. You receive the raw OCR text
 from a grocery receipt and must produce a clean list of food items the user bought.
 
-You MUST return ONLY valid JSON in this exact shape:
-{
-  "items": [
-    {
-      "name": "Danone Skyr 0%",
-      "foodKey": "yogurt",
-      "qty": "1",
-      "category": "Dairy",
-      "daysLeft": 14,
-      "confidence": 0.92
-    }
-  ]
-}
+The output schema is enforced — return one item per distinct food line, with:
+- foodKey: closest match from this list: ${FOOD_KEYS.join(", ")}
+- category: one of ${CATEGORIES.join(", ")}
+- qty: extracted from the line if present ("2X", "1 KG"); otherwise "1"
+- daysLeft: realistic default — dairy 7, meat 2, vegetables 6, pantry/dry 90, drinks 30
+- confidence: 0.0-1.0 (lower if the OCR line is ambiguous)
+- name: cleaned-up human-readable name ("CHICKEN BREAST" → "Chicken breast")
 
-Rules:
-- foodKey MUST be one of: milk, yogurt, butter, feta, egg, spinach, broccoli, tomato,
-  carrot, pepper, lemon, garlic, onion, avocado, chicken, salmon, beef, rice, pasta,
-  oil, bread, pesto, parmesan, wine, water. Pick the closest match.
-- category MUST be one of: Dairy, Vegetables, Meat, Pantry, Drinks, Freezer.
-- Skip non-food items (bags, plastic, deposit, tax, total, store branding, dates, payment).
-- Normalize messy uppercase OCR ("CHICKEN BREAST" → "Chicken breast").
-- qty: extract from the line if present ("2X", "1 KG"); otherwise "1".
-- daysLeft realistic default — dairy 7, meat 2, vegetables 6, pantry/dry 90, drinks 30.
-- confidence: 0.0–1.0; lower if the OCR line is ambiguous or messy.
-- Combine obvious duplicates from typos.
-- If there are no food items, return {"items": []}.`;
-
-interface Item {
-  name: string;
-  foodKey: string;
-  qty: string;
-  category: string;
-  daysLeft: number;
-  confidence: number;
-}
+Skip non-food items (bags, plastic, deposit, tax, total, store branding,
+dates, payment lines). Combine obvious duplicates from typos. If no food
+items, return {"items": []}.`;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -71,10 +45,10 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model: "gpt-4.1-mini",
         temperature: 0.1,
-        response_format: { type: "json_object" },
+        response_format: strictSchema("receipt_parse", itemsSchema),
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: text.slice(0, 8000) }, // hard cap, receipts are short
+          { role: "user", content: text.slice(0, 8000) },
         ],
       }),
     });
@@ -87,7 +61,7 @@ Deno.serve(async (req: Request) => {
     const completion = await openaiRes.json();
     const raw = completion?.choices?.[0]?.message?.content ?? "{}";
 
-    let parsed: { items?: Item[] } = {};
+    let parsed: { items?: unknown } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
