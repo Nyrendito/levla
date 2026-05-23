@@ -8,8 +8,8 @@ struct HomeView: View {
     @State private var selectedDayOffset: Int = 0
     @State private var openedRecipe: Recipe?
 
-    private var cookable: [Recipe] {
-        Array(SeedData.recipes.sorted { $0.matchPct > $1.matchPct }.prefix(3))
+    private var cookable: [RecipeMatch] {
+        Array(RecipeMatcher.rank(recipes: SeedData.recipes, fridge: app.fridge.items).prefix(3))
     }
 
     private var recent: [FoodItem] {
@@ -170,16 +170,38 @@ struct HomeView: View {
             }
 
             VStack(spacing: 14) {
-                ForEach(cookable) { r in
-                    Button { openedRecipe = r } label: {
-                        TrackRecipeCard(recipe: r)
+                if cookable.isEmpty || app.fridge.items.isEmpty {
+                    EmptyCookCard()
+                } else {
+                    ForEach(cookable) { m in
+                        Button { openedRecipe = m.recipe } label: {
+                            TrackRecipeCard(match: m)
+                        }
+                        .buttonStyle(.plain)
+                        .tapPress()
                     }
-                    .buttonStyle(.plain)
-                    .tapPress()
                 }
             }
         }
         .padding(.horizontal, L.S.pad)
+    }
+}
+
+private struct EmptyCookCard: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("Scan your fridge first.")
+                .font(.manrope(16, .heavy))
+                .foregroundStyle(L.ink)
+            Text("Recipe suggestions appear based on what you actually have.")
+                .font(.manrope(13, .semibold))
+                .foregroundStyle(L.ink.opacity(0.55))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .modifier(_HomeCardShadow())
     }
 }
 
@@ -553,7 +575,9 @@ private struct EmptyRecentlyAdded: View {
 // MARK: - Tracker-style recipe card
 
 struct TrackRecipeCard: View {
-    let recipe: Recipe
+    let match: RecipeMatch
+    private var recipe: Recipe { match.recipe }
+
     var body: some View {
         HStack(spacing: 12) {
             FoodOrb(foods: Array(recipe.uses.prefix(3)), color: recipe.color, accent: recipe.accent, height: 92, radius: 14)
@@ -581,9 +605,20 @@ struct TrackRecipeCard: View {
                 .font(.manrope(13, .bold))
                 .foregroundStyle(L.ink.opacity(0.6))
 
-                LPill(tone: .mint) {
-                    LSymbol(key: "check", size: 13, weight: .heavy)
-                    Text("Uses \(recipe.uses.count) of yours")
+                if match.matchPct == 100 {
+                    LPill(tone: .mint) {
+                        LSymbol(key: "check", size: 13, weight: .heavy)
+                        Text("All in your fridge")
+                    }
+                } else if !match.useSoonIngredients.isEmpty {
+                    LPill(tone: .pop) {
+                        LSymbol(key: "flame", size: 12, weight: .heavy)
+                        Text("Uses \(match.useSoonIngredients.first?.name ?? "soon") today")
+                    }
+                } else {
+                    LPill(tone: .neutral) {
+                        Text("\(match.matchPct)% match · \(match.missingIngredients.count) to buy")
+                    }
                 }
             }
 

@@ -12,8 +12,8 @@ struct CookDeckView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var animating = false
 
-    private var source: [Recipe] {
-        SeedData.recipes.sorted { $0.matchPct > $1.matchPct }
+    private var source: [RecipeMatch] {
+        RecipeMatcher.rank(recipes: SeedData.recipes, fridge: app.fridge.items)
     }
 
     var body: some View {
@@ -28,7 +28,9 @@ struct CookDeckView: View {
                     .padding(.top, 8)
 
                 ZStack {
-                    if idx >= source.count {
+                    if app.fridge.items.isEmpty {
+                        EmptyFridgeForCookView()
+                    } else if idx >= source.count {
                         DeckDoneView(total: source.count, saved: saved) {
                             saved = 0; idx = 0
                         }
@@ -115,8 +117,8 @@ struct CookDeckView: View {
 
     @ViewBuilder
     private var topCard: some View {
-        let recipe = source[idx]
-        cardView(recipe)
+        let match = source[idx]
+        cardView(match)
             .offset(dragOffset)
             .rotationEffect(.degrees(Double(dragOffset.width / 18)))
             .gesture(
@@ -133,13 +135,12 @@ struct CookDeckView: View {
                         }
                     }
             )
-            .onTapGesture { openedRecipe = recipe }
+            .onTapGesture { openedRecipe = match.recipe }
     }
 
-    private func cardView(_ r: Recipe) -> some View {
-        SwipeCard(recipe: r,
-                  dragX: dragOffset.width, dragY: dragOffset.height,
-                  active: source.indices.contains(idx) && source[idx].id == r.id)
+    private func cardView(_ m: RecipeMatch) -> some View {
+        SwipeCard(match: m,
+                  dragX: dragOffset.width, dragY: dragOffset.height)
     }
 
     // MARK: - Actions
@@ -151,7 +152,7 @@ struct CookDeckView: View {
             ActionBtn(icon: "flame", size: 72, bg: L.ink, fg: L.cream, big: true) { commit(.up) }
             ActionBtn(icon: "heart", size: 64, bg: .white, fg: L.mint, big: true) { commit(.yes) }
             ActionBtn(icon: "arrowR", size: 48, bg: L.cream.opacity(0.92), fg: L.ink.opacity(0.55)) {
-                if idx < source.count { openedRecipe = source[idx] }
+                if idx < source.count { openedRecipe = source[idx].recipe }
             }
         }
         .frame(maxWidth: .infinity)
@@ -166,7 +167,7 @@ struct CookDeckView: View {
         let dy: CGFloat = direction == .up ? -800 : 0
         withAnimation(.easeOut(duration: 0.32)) { dragOffset = .init(width: dx, height: dy) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
-            if direction == .up, idx < source.count { openedRecipe = source[idx] }
+            if direction == .up, idx < source.count { openedRecipe = source[idx].recipe }
             if direction == .yes { saved += 1 }
             idx += 1
             dragOffset = .zero
@@ -183,10 +184,11 @@ struct CookDeckView: View {
 // MARK: - SwipeCard
 
 private struct SwipeCard: View {
-    let recipe: Recipe
+    let match: RecipeMatch
     var dragX: CGFloat = 0
     var dragY: CGFloat = 0
-    var active: Bool = false
+
+    private var recipe: Recipe { match.recipe }
 
     private var yesOpacity: Double { Double(min(1, max(0, dragX / 80))) }
     private var noOpacity:  Double { Double(min(1, max(0, -dragX / 80))) }
@@ -203,7 +205,7 @@ private struct SwipeCard: View {
 
             VStack {
                 HStack {
-                    if recipe.matchPct == 100 {
+                    if match.matchPct == 100 {
                         HStack(spacing: 6) {
                             LSymbol(key: "check", size: 13, weight: .heavy)
                             Text("All in fridge")
@@ -214,7 +216,7 @@ private struct SwipeCard: View {
                         .foregroundStyle(L.cream)
                         .shadow(color: L.mint.opacity(0.32), radius: 8, x: 0, y: 4)
                     } else {
-                        Text("\(recipe.matchPct)% match")
+                        Text("\(match.matchPct)% match")
                             .font(.manrope(13, .heavy))
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .background(L.pop, in: Capsule())
@@ -259,10 +261,10 @@ private struct SwipeCard: View {
                             Text("\(recipe.kcal) kcal")
                         }
                         Text("\(recipe.protein)g protein")
-                        if !recipe.missing.isEmpty {
+                        if !match.missingIngredients.isEmpty {
                             HStack(spacing: 5) {
                                 LSymbol(key: "cart", size: 13, weight: .semibold)
-                                Text("\(recipe.missing.count) to buy")
+                                Text("\(match.missingIngredients.count) to buy")
                             }
                             .foregroundStyle(L.pop)
                         }
@@ -279,7 +281,6 @@ private struct SwipeCard: View {
                 .padding(22)
             }
 
-            // SKIP / SAVE / COOK NOW stamps
             stamp("SKIP", color: L.pop, rotate: -12, opacity: noOpacity, alignment: .topLeading, offset: .init(width: 24, height: 36))
             stamp("SAVE", color: L.mint, rotate: 12, opacity: yesOpacity, alignment: .topTrailing, offset: .init(width: -24, height: 36))
             stamp("COOK NOW", color: L.ink, rotate: 0, opacity: upOpacity, alignment: .top, offset: .init(width: 0, height: 36), bg: L.cream.opacity(0.85))
@@ -343,6 +344,34 @@ private struct DeckDoneView: View {
                 .shadow(color: L.ink.opacity(0.22), radius: 14, x: 0, y: 8)
             }
             .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.white, in: RoundedRectangle(cornerRadius: L.R.xxl, style: .continuous))
+        .shadow(color: L.ink.opacity(0.10), radius: 30, x: 0, y: 14)
+    }
+}
+
+private struct EmptyFridgeForCookView: View {
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(L.popBg)
+                LSymbol(key: "fridge", size: 36, weight: .heavy).foregroundStyle(L.pop)
+            }
+            .frame(width: 78, height: 78)
+
+            Text("Scan your fridge first.")
+                .font(.manrope(26, .heavy))
+                .kerning(-0.8)
+                .foregroundStyle(L.ink)
+                .multilineTextAlignment(.center)
+            Text("Levla matches recipes against what you actually have. Open the orange Scan button below.")
+                .font(.manrope(14, .medium))
+                .lineSpacing(3)
+                .foregroundStyle(L.ink.opacity(0.6))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

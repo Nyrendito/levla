@@ -3,12 +3,18 @@ import SwiftUI
 /// Recipe detail — hero FoodOrb, reason badge, stat row, ingredients, steps,
 /// sticky cook CTA. Mirrors V2RecipeDetail.
 struct RecipeDetailView: View {
+    @Environment(AppState.self) private var app
     let recipe: Recipe
     let onClose: () -> Void
 
     @State private var servings = 2
     @State private var cooking = false
     @State private var stepIdx = 0
+    @State private var addedToShoppingCount = 0
+
+    private var match: RecipeMatch {
+        RecipeMatcher.match(recipe: recipe, fridge: app.fridge.items)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -44,10 +50,11 @@ struct RecipeDetailView: View {
                         .foregroundStyle(L.ink.opacity(0.55))
                         .padding(.top, 4)
 
-                    // Reason badge — quietly AI
+                    // Reason badge — quietly AI, swaps to a "live" reason
+                    // based on the user's actual fridge if one applies.
                     HStack(spacing: 12) {
                         AIDot(color: L.pop, size: 8)
-                        Text(recipe.why)
+                        Text(liveReason)
                             .font(.manrope(13.5, .bold))
                             .kerning(-0.1)
                             .foregroundStyle(L.popDark)
@@ -68,7 +75,10 @@ struct RecipeDetailView: View {
                     .modifier(_DetailCardShadow())
                     .padding(.top, 16)
 
-                    // Ingredients
+                    // Ingredients — live state from the user's fridge.
+                    let liveIngredients = match.ingredients
+                    let inFridgeCount = liveIngredients.filter(\.have).count
+
                     HStack(alignment: .bottom) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Ingredients")
@@ -76,12 +86,17 @@ struct RecipeDetailView: View {
                                 .kerning(-0.5)
                                 .foregroundStyle(L.ink)
                             HStack(spacing: 0) {
-                                Text("\(recipe.ingredients.filter(\.have).count)")
+                                Text("\(inFridgeCount)")
                                     .font(.manrope(13, .heavy))
                                     .foregroundStyle(L.mint)
-                                Text(" / \(recipe.ingredients.count) in fridge")
+                                Text(" / \(liveIngredients.count) in fridge")
                                     .font(.manrope(13, .semibold))
                                     .foregroundStyle(L.ink.opacity(0.55))
+                                if !match.missingIngredients.isEmpty {
+                                    Text(" · \(match.missingIngredients.count) to buy")
+                                        .font(.manrope(13, .semibold))
+                                        .foregroundStyle(L.pop)
+                                }
                             }
                         }
                         Spacer()
@@ -90,13 +105,33 @@ struct RecipeDetailView: View {
                     .padding(.top, 28)
 
                     VStack(spacing: 0) {
-                        ForEach(Array(recipe.ingredients.enumerated()), id: \.element.id) { (i, ing) in
-                            ingredientRow(ing, isLast: i == recipe.ingredients.count - 1)
+                        ForEach(Array(liveIngredients.enumerated()), id: \.element.id) { (i, ing) in
+                            ingredientRow(ing, isLast: i == liveIngredients.count - 1)
                         }
                     }
                     .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .modifier(_DetailCardShadow())
                     .padding(.top, 14)
+
+                    if !match.missingIngredients.isEmpty {
+                        Button { addMissingToShoppingList() } label: {
+                            HStack {
+                                LSymbol(key: "cart", size: 16, weight: .heavy)
+                                Text(addedToShoppingCount > 0
+                                     ? "\(addedToShoppingCount) added to your list"
+                                     : "Add \(match.missingIngredients.count) missing to shopping list")
+                                Spacer()
+                                LSymbol(key: "arrowR", size: 14, weight: .heavy)
+                            }
+                            .font(.manrope(14, .heavy))
+                            .foregroundStyle(addedToShoppingCount > 0 ? L.mint : L.pop)
+                            .padding(.horizontal, 16).padding(.vertical, 14)
+                            .background((addedToShoppingCount > 0 ? L.mintBg : L.popBg), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 10)
+                        .disabled(addedToShoppingCount > 0)
+                    }
 
                     // Steps
                     Text("Steps")
@@ -140,12 +175,74 @@ struct RecipeDetailView: View {
             .background(L.paper.ignoresSafeArea())
 
             BigCTA(title: cooking ? "Next step" : "Start cooking", icon: "flame", kind: .primary) {
-                if cooking { stepIdx = min(stepIdx + 1, recipe.steps.count - 1) } else { cooking = true }
+                if cooking {
+                    stepIdx = min(stepIdx + 1, recipe.steps.count - 1)
+                } else {
+                    cooking = true
+                    // Cooking starts → auto-add anything missing to the shopping list.
+                    addMissingToShoppingList()
+                }
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 22)
         }
         .background(L.paper.ignoresSafeArea())
+    }
+
+    private var liveReason: String {
+        if !match.useSoonIngredients.isEmpty {
+            let names = match.useSoonIngredients.prefix(2).map(\.name).joined(separator: " + ")
+            return "Uses your \(names) — they need eating soon."
+        }
+        if match.matchPct == 100 {
+            return "You have every ingredient — start now."
+        }
+        if !match.missingIngredients.isEmpty {
+            return "\(match.missingIngredients.count) missing — Levla can add them to your list."
+        }
+        return recipe.why
+    }
+
+    private func addMissingToShoppingList() {
+        guard let userId = app.auth.currentUserId else { return }
+        let alreadyOnList = Set(app.shopping.items.map { $0.name.lowercased() })
+        let toAdd = match.missingIngredients.filter { !alreadyOnList.contains($0.name.lowercased()) }
+        guard !toAdd.isEmpty else {
+            addedToShoppingCount = 0
+            return
+        }
+        addedToShoppingCount = toAdd.count
+        Task {
+            for ing in toAdd {
+                let item = ShoppingListItem(
+                    id: UUID(),
+                    userId: userId,
+                    name: ing.name,
+                    qty: ing.amount,
+                    section: sectionFor(foodKey: ing.foodKey),
+                    auto: true,
+                    forRecipe: recipe.title,
+                    checked: false,
+                    inFridge: false,
+                    addedBy: nil,
+                    createdAt: Date()
+                )
+                await app.shopping.add(item)
+            }
+        }
+    }
+
+    private func sectionFor(foodKey: String) -> String {
+        switch foodKey {
+        case "milk", "yogurt", "butter", "feta", "egg": return "Dairy"
+        case "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon",
+             "garlic", "onion", "avocado":                return "Produce"
+        case "chicken", "salmon", "beef":                 return "Meat"
+        case "rice", "pasta", "oil", "pesto", "parmesan": return "Pantry"
+        case "bread":                                     return "Bakery"
+        case "wine", "water":                             return "Drinks"
+        default:                                          return "Other"
+        }
     }
 
     @ViewBuilder
