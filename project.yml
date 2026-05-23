@@ -1,0 +1,69 @@
+name: Levla
+options:
+  bundleIdPrefix: com.nyrendito
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: en
+  groupSortPosition: top
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    from: "2.20.0"
+
+targets:
+  Levla:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Levla
+        excludes:
+          - "**/*.md"
+    resources:
+      - path: Levla/Assets.xcassets
+      - path: Levla/Design/Fonts
+        type: folder
+    info:
+      path: Levla/App/Info.plist
+      properties:
+        CFBundleDisplayName: Levla
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiredDeviceCapabilities:
+          - arm64
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: "Levla uses the camera to scan your fridge, receipts and meals so we can keep your inventory up to date."
+        NSPhotoLibraryUsageDescription: "Levla uses your photo library so you can attach images of items you add."
+        NSMicrophoneUsageDescription: "Levla uses the microphone for voice-adding items to your fridge."
+        SUPABASE_URL: "https://cinsozlrpmqbbalivxza.supabase.co"
+        SUPABASE_ANON_KEY: "sb_publishable_Lrr1Qfif0PdwkVFGavLghA_kcv3JJuj"
+        UIAppFonts:
+          - Manrope-Variable.ttf
+          - JetBrainsMono-Medium.ttf
+        UIBackgroundModes: []
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nyrendito.levla
+        INFOPLIST_FILE: Levla/App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        DEVELOPMENT_ASSET_PATHS: "\"Levla/Preview Content\""
+        TARGETED_DEVICE_FAMILY: "1"
+        OTHER_LDFLAGS: "$(inherited) -ObjC"
+    dependencies:
+      - package: Supabase
+        product: Supabase

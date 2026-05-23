@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+*.xcuserstate
+*.swp
+
+# Xcode project — regenerated from project.yml via XcodeGen
+# Comment the next line if you want to commit the .xcodeproj
+Levla.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods / Carthage (we don't use these but anyway)
+Pods/
+Carthage/Build/
+
+# Fastlane / CI
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Local secrets (if you ever move to xcconfig)
+Local.xcconfig
+*.local.xcconfig
