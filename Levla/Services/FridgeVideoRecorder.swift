@@ -38,9 +38,11 @@ final class FridgeVideoRecorder: NSObject {
     // MARK: - Tuning
 
     /// Soft cap on clip duration. The recorder auto-stops at this mark so a
-    /// distracted user can't end up uploading a 90 s video. Gemini's per-
-    /// second cost adds up.
-    var maxDuration: TimeInterval = 8.0
+    /// distracted user can't end up uploading a 90 s video. 20 s is long
+    /// enough to sweep every shelf + the drawers + the door bins at a
+    /// natural pace; at MEDIA_RESOLUTION_LOW that's roughly 2 000 Gemini
+    /// tokens of video — still cheap.
+    var maxDuration: TimeInterval = 20.0
 
     // MARK: - Private
 
@@ -100,9 +102,12 @@ final class FridgeVideoRecorder: NSObject {
 
                 if sessionRef.outputs.isEmpty, sessionRef.canAddOutput(outRef) {
                     sessionRef.addOutput(outRef)
-                    // 8s × 720p ≈ 5-15 MB raw; we cap recording duration
-                    // hard here as a second line of defence.
-                    outRef.maxRecordedDuration = CMTime(seconds: 12, preferredTimescale: 600)
+                    // Hard ceiling slightly above maxDuration — second line
+                    // of defence in case the timer-based auto-stop hiccups.
+                    // 25 s × 720p ≈ 15-30 MB raw, well under iOS's tempfile
+                    // limits; the transcode step shrinks it again before
+                    // upload.
+                    outRef.maxRecordedDuration = CMTime(seconds: 25, preferredTimescale: 600)
                 }
 
                 sessionRef.commitConfiguration()
