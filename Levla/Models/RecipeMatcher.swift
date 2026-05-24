@@ -45,9 +45,12 @@ enum RecipeMatcher {
     static let pantryStaples: Set<String> = [
         "salt", "pepper", "oil", "olive_oil", "olive-oil",
         "butter", "water", "sugar", "vinegar",
-        "garlic", "onion",   // very commonly assumed
-        "flour", "rice",     // dry pantry basics
+        "garlic", "onion",       // very commonly assumed
+        "flour", "rice",         // dry pantry basics
         "spices", "herbs",
+        // Dried/long-shelf items most people keep around
+        "soy-sauce", "ketchup", "mustard", "mayo", "honey",
+        "basil", "parsley", "cilantro", "dill", "thyme", "rosemary", "mint",
     ]
 
     /// Recompute availability from the user's current fridge.

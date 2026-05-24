@@ -84,6 +84,20 @@ final class RecipeService {
                 cachedKey = key
                 lastLoadedAt = Date()
                 lastError = nil
+                // Fire-and-forget background pre-warm so the recipe hero
+                // images are ready by the time the user swipes to them.
+                // ImageCacheService dedupes in-flight requests, so calling
+                // this is cheap even if the orb's .task also runs.
+                Task.detached { [recipes = mapped] in
+                    for recipe in recipes {
+                        _ = await ImageCacheService.shared.imageURL(
+                            kind: .recipe,
+                            key: recipe.slug,
+                            title: recipe.title,
+                            uses: recipe.uses
+                        )
+                    }
+                }
             }
         } catch {
             lastError = error.localizedDescription
@@ -95,13 +109,17 @@ final class RecipeService {
     /// - camelCase or snake_case keys
     /// - missing fields (filled with sensible defaults)
     /// - numeric fields delivered as strings
-    /// Returns whichever recipes parsed successfully.
+    /// Returns whichever recipes parsed successfully. Slugs are deduped so
+    /// no two recipes in the same batch share an image cache key (the LLM
+    /// occasionally produces near-identical slugs and the Cook deck would
+    /// then show the same hero photo on multiple cards).
     private func parseRecipes(from data: Data) -> [Recipe] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return []
         }
         let raws = (root["recipes"] as? [Any]) ?? (root["data"] as? [Any]) ?? []
 
+        var seenSlugs = Set<String>()
         return raws.compactMap { raw -> Recipe? in
             guard let r = raw as? [String: Any] else { return nil }
 
@@ -138,10 +156,18 @@ final class RecipeService {
             }
 
             let title = str("title", "name") ?? "Untitled recipe"
-            let slug = str("slug") ?? title
+            let rawSlug = str("slug") ?? title
                 .lowercased()
                 .replacingOccurrences(of: " ", with: "-")
                 .replacingOccurrences(of: ",", with: "")
+            // Dedup: if we've already seen this slug, suffix with -2, -3, ...
+            var slug = rawSlug
+            var n = 2
+            while seenSlugs.contains(slug) {
+                slug = "\(rawSlug)-\(n)"
+                n += 1
+            }
+            seenSlugs.insert(slug)
 
             let ingredientsRaw = arrDict("ingredients")
             let ingredients = ingredientsRaw.map { ing -> RecipeIngredient in

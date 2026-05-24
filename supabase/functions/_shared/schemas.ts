@@ -6,16 +6,30 @@
 export const FOOD_KEYS = [
   // dairy
   "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese",
+  "mozzarella", "cheddar", "ricotta",
   // vegetables
   "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "lime",
   "garlic", "ginger", "onion", "avocado", "potato", "sweet-potato",
   "mushroom", "cucumber", "zucchini", "lettuce", "cabbage",
+  "corn", "peas", "asparagus", "celery", "leek", "eggplant", "beet", "radish",
+  "pumpkin", "cauliflower", "green-beans", "kale", "arugula",
+  // herbs
+  "basil", "parsley", "cilantro", "dill", "thyme", "rosemary", "mint",
   // proteins
   "chicken", "salmon", "beef", "tuna", "shrimp", "tofu",
-  // pantry
+  "bacon", "ham", "sausage", "pork", "lamb", "turkey", "duck", "crab", "lobster",
+  // pantry / grains
   "rice", "pasta", "oil", "bread", "pesto", "parmesan",
+  "oats", "quinoa", "flour", "sugar", "honey", "jam",
+  "chickpeas", "black-beans", "lentils", "almonds", "peanut-butter",
+  // sauces
+  "soy-sauce", "ketchup", "mustard", "mayo", "hummus", "olives", "pickles",
+  // fruits
+  "apple", "banana", "orange", "strawberry", "blueberry", "raspberry",
+  "mango", "pineapple", "grape", "watermelon", "peach", "pear",
+  "kiwi", "pomegranate",
   // drinks
-  "wine", "water",
+  "wine", "water", "juice", "coffee", "tea",
 ] as const;
 
 export const CATEGORIES = [

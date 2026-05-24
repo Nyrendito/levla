@@ -56,7 +56,61 @@ struct FoodPalette {
     ]
 
     static func palette(for key: String) -> FoodPalette {
-        table[key] ?? table["milk"]!
+        // Specific entry wins. For keys we haven't hand-tuned (the long
+        // tail past the core ~40), pick a sensible neutral pastel by
+        // looking at the key string — green for vegetables/herbs, peach
+        // for proteins, butter-tan for pantry, etc. Most of the time the
+        // FoodTile will end up showing the cached AI image anyway; this
+        // is purely the loading-state background.
+        if let p = table[key] { return p }
+        return defaultPalette(for: key)
+    }
+
+    private static let defaultGreen = FoodPalette(
+        bg: .init(hex: 0xE0EAD6), fg: .init(hex: 0x8FAC68), rim: .init(hex: 0x4F6E26), label: ""
+    )
+    private static let defaultPeach = FoodPalette(
+        bg: .init(hex: 0xF2E5D2), fg: .init(hex: 0xE0B68A), rim: .init(hex: 0xA66E33), label: ""
+    )
+    private static let defaultTan = FoodPalette(
+        bg: .init(hex: 0xF1E6C2), fg: .init(hex: 0xDDC084), rim: .init(hex: 0x9F7F2D), label: ""
+    )
+    private static let defaultBlue = FoodPalette(
+        bg: .init(hex: 0xE4EAEC), fg: .init(hex: 0xC7D7DC), rim: .init(hex: 0x7E9098), label: ""
+    )
+    private static let defaultCream = FoodPalette(
+        bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xF4EFE2), rim: .init(hex: 0xD9C99A), label: ""
+    )
+
+    /// Sensible fallback when a key isn't in the curated palette table.
+    private static func defaultPalette(for key: String) -> FoodPalette {
+        // Vegetables / herbs / fruits → green; proteins / meats → peach;
+        // pantry / sauces / oils → tan; drinks → blue; dairy → cream.
+        let greenKeys: Set<String> = [
+            "corn","peas","asparagus","celery","leek","eggplant","beet","radish",
+            "pumpkin","cauliflower","green-beans","kale","arugula",
+            "basil","parsley","cilantro","dill","thyme","rosemary","mint",
+            "apple","banana","orange","strawberry","blueberry","raspberry",
+            "mango","pineapple","grape","watermelon","peach","pear","kiwi","pomegranate",
+            "olives","pickles",
+        ]
+        let peachKeys: Set<String> = [
+            "bacon","ham","sausage","pork","lamb","turkey","duck","crab","lobster",
+        ]
+        let tanKeys: Set<String> = [
+            "oats","quinoa","flour","sugar","honey","jam",
+            "chickpeas","black-beans","lentils","almonds","peanut-butter",
+            "soy-sauce","ketchup","mustard","mayo","hummus",
+        ]
+        let blueKeys: Set<String> = ["juice","coffee","tea"]
+        let creamKeys: Set<String> = ["mozzarella","cheddar","ricotta"]
+
+        if greenKeys.contains(key) { return defaultGreen }
+        if peachKeys.contains(key) { return defaultPeach }
+        if tanKeys.contains(key)   { return defaultTan }
+        if blueKeys.contains(key)  { return defaultBlue }
+        if creamKeys.contains(key) { return defaultCream }
+        return defaultGreen
     }
 }
 

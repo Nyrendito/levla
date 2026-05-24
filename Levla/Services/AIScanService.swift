@@ -214,16 +214,30 @@ enum AIScanError: LocalizedError {
 private let knownFoodKeys: Set<String> = [
     // dairy
     "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese",
+    "mozzarella", "cheddar", "ricotta",
     // vegetables
     "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "lime",
     "garlic", "ginger", "onion", "avocado", "potato", "sweet-potato",
     "mushroom", "cucumber", "zucchini", "lettuce", "cabbage",
+    "corn", "peas", "asparagus", "celery", "leek", "eggplant", "beet", "radish",
+    "pumpkin", "cauliflower", "green-beans", "kale", "arugula",
+    // herbs
+    "basil", "parsley", "cilantro", "dill", "thyme", "rosemary", "mint",
     // proteins
     "chicken", "salmon", "beef", "tuna", "shrimp", "tofu",
-    // pantry
+    "bacon", "ham", "sausage", "pork", "lamb", "turkey", "duck", "crab", "lobster",
+    // pantry / grains
     "rice", "pasta", "oil", "bread", "pesto", "parmesan",
+    "oats", "quinoa", "flour", "sugar", "honey", "jam",
+    "chickpeas", "black-beans", "lentils", "almonds", "peanut-butter",
+    // sauces
+    "soy-sauce", "ketchup", "mustard", "mayo", "hummus", "olives", "pickles",
+    // fruits
+    "apple", "banana", "orange", "strawberry", "blueberry", "raspberry",
+    "mango", "pineapple", "grape", "watermelon", "peach", "pear",
+    "kiwi", "pomegranate",
     // drinks
-    "wine", "water",
+    "wine", "water", "juice", "coffee", "tea",
 ]
 
 private func normalizedFoodKey(_ raw: String) -> String {
@@ -236,17 +250,28 @@ private func normalizedFoodKey(_ raw: String) -> String {
 
 private func defaultCategory(for foodKey: String) -> FoodCategory {
     switch foodKey {
-    case "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese":
+    case "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese",
+         "mozzarella", "cheddar", "ricotta":
         return .dairy
     case "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "lime",
          "garlic", "ginger", "onion", "avocado", "potato", "sweet-potato",
-         "mushroom", "cucumber", "zucchini", "lettuce", "cabbage":
+         "mushroom", "cucumber", "zucchini", "lettuce", "cabbage",
+         "corn", "peas", "asparagus", "celery", "leek", "eggplant", "beet", "radish",
+         "pumpkin", "cauliflower", "green-beans", "kale", "arugula",
+         "basil", "parsley", "cilantro", "dill", "thyme", "rosemary", "mint",
+         "apple", "banana", "orange", "strawberry", "blueberry", "raspberry",
+         "mango", "pineapple", "grape", "watermelon", "peach", "pear",
+         "kiwi", "pomegranate":
         return .vegetables
-    case "chicken", "salmon", "beef", "tuna", "shrimp", "tofu":
+    case "chicken", "salmon", "beef", "tuna", "shrimp", "tofu",
+         "bacon", "ham", "sausage", "pork", "lamb", "turkey", "duck", "crab", "lobster":
         return .meat
-    case "rice", "pasta", "oil", "bread", "pesto", "parmesan":
+    case "rice", "pasta", "oil", "bread", "pesto", "parmesan",
+         "oats", "quinoa", "flour", "sugar", "honey", "jam",
+         "chickpeas", "black-beans", "lentils", "almonds", "peanut-butter",
+         "soy-sauce", "ketchup", "mustard", "mayo", "hummus", "olives", "pickles":
         return .pantry
-    case "wine", "water":
+    case "wine", "water", "juice", "coffee", "tea":
         return .drinks
     default:
         return .pantry
