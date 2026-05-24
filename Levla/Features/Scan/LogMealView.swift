@@ -418,10 +418,17 @@ private struct LogMealResultStage: View {
     }
 
     private var macroGrid: some View {
-        HStack(spacing: 10) {
-            macroChip(label: "Protein", value: "\(meal.protein)g", color: L.macroProtein)
-            macroChip(label: "Carbs",   value: "\(meal.carbs)g",   color: L.macroCarbs)
-            macroChip(label: "Fat",     value: "\(meal.fat)g",     color: L.macroFat)
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                macroChip(label: "Protein", value: "\(meal.protein)g", color: L.macroProtein)
+                macroChip(label: "Carbs",   value: "\(meal.carbs)g",   color: L.macroCarbs)
+                macroChip(label: "Fat",     value: "\(meal.fat)g",     color: L.macroFat)
+            }
+            HStack(spacing: 10) {
+                macroChip(label: "Fiber",  value: "\(meal.fiber)g",     color: Color(hex: 0x9A6FCE))
+                macroChip(label: "Sugar",  value: "\(meal.sugar)g",     color: Color(hex: 0xE0789B))
+                macroChip(label: "Sodium", value: "\(meal.sodium)mg",   color: Color(hex: 0xD49B3E))
+            }
         }
     }
 

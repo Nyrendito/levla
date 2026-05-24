@@ -200,6 +200,26 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
     var dietaryPrefs: [String]
     var onboarded: Bool
 
+    // Baseline AI-generated plan. Stored at the end of onboarding via
+    // `generate-meal-plan`. Subsequent weight / height tweaks adjust the
+    // baseline locally using Mifflin-St Jeor deltas, so the plan stays
+    // smart but small input changes still nudge the targets.
+    var baselineKcalGoal: Int?
+    var baselineProteinGoal: Int?
+    var baselineCarbsGoal: Int?
+    var baselineFatGoal: Int?
+    var baselineFiberGoal: Int?
+    var baselineSugarGoal: Int?
+    var baselineSodiumGoal: Int?
+    var baselineWeightKg: Double?
+    var baselineHeightCm: Int?
+    var baselineAge: Int?
+    var baselineSex: UserSex?
+    var baselineActivity: ActivityLevel?
+    var baselineGoal: UserGoal?
+    var planRationale: String?
+    var planGeneratedAt: Date?
+
     enum CodingKeys: String, CodingKey {
         case id
         case displayName = "display_name"
@@ -213,6 +233,21 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         case activityLevel = "activity_level"
         case dietaryPrefs = "dietary_prefs"
         case onboarded
+        case baselineKcalGoal    = "baseline_kcal_goal"
+        case baselineProteinGoal = "baseline_protein_goal"
+        case baselineCarbsGoal   = "baseline_carbs_goal"
+        case baselineFatGoal     = "baseline_fat_goal"
+        case baselineFiberGoal   = "baseline_fiber_goal"
+        case baselineSugarGoal   = "baseline_sugar_goal"
+        case baselineSodiumGoal  = "baseline_sodium_goal"
+        case baselineWeightKg    = "baseline_weight_kg"
+        case baselineHeightCm    = "baseline_height_cm"
+        case baselineAge         = "baseline_age"
+        case baselineSex         = "baseline_sex"
+        case baselineActivity    = "baseline_activity"
+        case baselineGoal        = "baseline_goal"
+        case planRationale       = "plan_rationale"
+        case planGeneratedAt     = "plan_generated_at"
     }
 
     init(
@@ -227,7 +262,22 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         goal: UserGoal? = nil,
         activityLevel: ActivityLevel? = nil,
         dietaryPrefs: [String] = [],
-        onboarded: Bool = false
+        onboarded: Bool = false,
+        baselineKcalGoal: Int? = nil,
+        baselineProteinGoal: Int? = nil,
+        baselineCarbsGoal: Int? = nil,
+        baselineFatGoal: Int? = nil,
+        baselineFiberGoal: Int? = nil,
+        baselineSugarGoal: Int? = nil,
+        baselineSodiumGoal: Int? = nil,
+        baselineWeightKg: Double? = nil,
+        baselineHeightCm: Int? = nil,
+        baselineAge: Int? = nil,
+        baselineSex: UserSex? = nil,
+        baselineActivity: ActivityLevel? = nil,
+        baselineGoal: UserGoal? = nil,
+        planRationale: String? = nil,
+        planGeneratedAt: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -241,6 +291,21 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         self.activityLevel = activityLevel
         self.dietaryPrefs = dietaryPrefs
         self.onboarded = onboarded
+        self.baselineKcalGoal = baselineKcalGoal
+        self.baselineProteinGoal = baselineProteinGoal
+        self.baselineCarbsGoal = baselineCarbsGoal
+        self.baselineFatGoal = baselineFatGoal
+        self.baselineFiberGoal = baselineFiberGoal
+        self.baselineSugarGoal = baselineSugarGoal
+        self.baselineSodiumGoal = baselineSodiumGoal
+        self.baselineWeightKg = baselineWeightKg
+        self.baselineHeightCm = baselineHeightCm
+        self.baselineAge = baselineAge
+        self.baselineSex = baselineSex
+        self.baselineActivity = baselineActivity
+        self.baselineGoal = baselineGoal
+        self.planRationale = planRationale
+        self.planGeneratedAt = planGeneratedAt
     }
 
     /// Defensive decoder: profiles created before personalization columns
@@ -261,6 +326,22 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         activityLevel = try? c.decode(ActivityLevel.self, forKey: .activityLevel)
         dietaryPrefs  = (try? c.decode([String].self, forKey: .dietaryPrefs)) ?? []
         onboarded     = (try? c.decode(Bool.self, forKey: .onboarded))    ?? false
+
+        baselineKcalGoal    = try? c.decode(Int.self,           forKey: .baselineKcalGoal)
+        baselineProteinGoal = try? c.decode(Int.self,           forKey: .baselineProteinGoal)
+        baselineCarbsGoal   = try? c.decode(Int.self,           forKey: .baselineCarbsGoal)
+        baselineFatGoal     = try? c.decode(Int.self,           forKey: .baselineFatGoal)
+        baselineFiberGoal   = try? c.decode(Int.self,           forKey: .baselineFiberGoal)
+        baselineSugarGoal   = try? c.decode(Int.self,           forKey: .baselineSugarGoal)
+        baselineSodiumGoal  = try? c.decode(Int.self,           forKey: .baselineSodiumGoal)
+        baselineWeightKg    = try? c.decode(Double.self,        forKey: .baselineWeightKg)
+        baselineHeightCm    = try? c.decode(Int.self,           forKey: .baselineHeightCm)
+        baselineAge         = try? c.decode(Int.self,           forKey: .baselineAge)
+        baselineSex         = try? c.decode(UserSex.self,       forKey: .baselineSex)
+        baselineActivity    = try? c.decode(ActivityLevel.self, forKey: .baselineActivity)
+        baselineGoal        = try? c.decode(UserGoal.self,      forKey: .baselineGoal)
+        planRationale       = try? c.decode(String.self,        forKey: .planRationale)
+        planGeneratedAt     = try? c.decode(Date.self,          forKey: .planGeneratedAt)
     }
 
     /// Computed: rough age in years from birth year. Returns nil if missing.
@@ -271,16 +352,41 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         return age >= 0 && age < 130 ? age : nil
     }
 
-    /// Mifflin-St Jeor BMR (kcal/day). Returns nil if any field missing.
+    /// Mifflin-St Jeor BMR for the user's CURRENT stats (kcal/day).
+    /// Returns nil if any field missing.
     var bmrKcal: Int? {
+        guard let weightKg, let heightCm, let age, let sex else { return nil }
+        return Self.bmr(weightKg: weightKg, heightCm: heightCm, age: age, sex: sex)
+    }
+
+    /// Mifflin-St Jeor BMR with explicit inputs (used for baseline-vs-current
+    /// delta math). Returns nil if any required input is missing.
+    static func bmr(weightKg: Double?, heightCm: Int?, age: Int?, sex: UserSex?) -> Int? {
         guard let weightKg, let heightCm, let age, let sex else { return nil }
         let s: Double = sex == .male ? 5 : (sex == .female ? -161 : -78)
         let bmr = 10 * weightKg + 6.25 * Double(heightCm) - 5 * Double(age) + s
         return Int(bmr.rounded())
     }
 
-    /// Daily calorie target — BMR × activity factor, adjusted by goal.
+    // MARK: - Daily goals (baseline plan + smart delta, falling back to Mifflin)
+
+    /// Daily calorie target. Prefers the AI-generated baseline + a Mifflin-
+    /// St Jeor delta for changes in weight / height / age / activity since
+    /// the plan was generated. If no baseline exists, falls back to a pure
+    /// Mifflin calculation.
+    ///
+    /// The delta keeps the personalized plan stable while still nudging the
+    /// numbers when the user updates their stats. Drop 10 kg → BMR roughly
+    /// drops by 100 kcal, TDEE drops ~150-190 kcal depending on activity.
     var dailyKcalGoal: Int? {
+        if let baselineKcal = baselineKcalGoal {
+            return baselineKcal + kcalDelta()
+        }
+        return computedKcalGoal()
+    }
+
+    /// Pure-Mifflin kcal goal, used when no AI baseline is available.
+    private func computedKcalGoal() -> Int? {
         guard let bmrKcal, let activityLevel else { return nil }
         let tdee = Double(bmrKcal) * activityLevel.factor
         let adjusted: Double
@@ -292,10 +398,36 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         return Int(adjusted.rounded())
     }
 
-    /// Protein target grams. 1.6g/kg for muscle gain / fat loss, 1.2g/kg
-    /// for maintenance.
+    /// kcal delta to apply to the baseline kcal goal based on how the user's
+    /// current stats differ from the baseline snapshot. Computed at the
+    /// TDEE level (BMR × activity factor) so weight, height, age, and
+    /// activity-level changes all flow through proportionally.
+    private func kcalDelta() -> Int {
+        guard let currentBMR = bmrKcal,
+              let currentAct = activityLevel,
+              let baselineBMR = Profile.bmr(
+                weightKg: baselineWeightKg,
+                heightCm: baselineHeightCm,
+                age: baselineAge,
+                sex: baselineSex
+              ),
+              let baselineAct = baselineActivity
+        else { return 0 }
+        let currentTDEE  = Double(currentBMR)  * currentAct.factor
+        let baselineTDEE = Double(baselineBMR) * baselineAct.factor
+        return Int((currentTDEE - baselineTDEE).rounded())
+    }
+
+    /// Protein target. Scales the baseline value by the ratio of current to
+    /// baseline body weight (1.6 g/kg behaviour, just expressed as a ratio).
+    /// Falls back to the pure 1.2/1.6 g/kg rule when no baseline exists.
     var dailyProteinGoal: Int? {
-        guard let weightKg else { return nil }
+        if let baseProtein = baselineProteinGoal,
+           let baseWeight = baselineWeightKg, baseWeight > 0,
+           let weightKg, weightKg > 0 {
+            return Int((Double(baseProtein) * (weightKg / baseWeight)).rounded())
+        }
+        guard let weightKg else { return baselineProteinGoal }
         let perKg: Double
         switch goal {
         case .gainMuscle?, .loseFat?: perKg = 1.6
@@ -304,24 +436,30 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         return Int((weightKg * perKg).rounded())
     }
 
-    /// 25% of kcal from fat, ÷9 kcal/g.
+    /// Fat target. If we have a baseline, scale by the kcal ratio so the
+    /// 25-35%-of-energy distribution holds as the kcal goal moves.
     var dailyFatGoal: Int? {
-        guard let dailyKcalGoal else { return nil }
+        if let baseFat = baselineFatGoal,
+           let baseKcal = baselineKcalGoal, baseKcal > 0,
+           let currentKcal = dailyKcalGoal {
+            return Int((Double(baseFat) * Double(currentKcal) / Double(baseKcal)).rounded())
+        }
+        guard let dailyKcalGoal else { return baselineFatGoal }
         return Int((Double(dailyKcalGoal) * 0.25 / 9).rounded())
     }
 
-    /// Remaining kcal split between carbs at 4 kcal/g.
+    /// Carbs = remaining kcal after protein + fat, ÷ 4 kcal/g.
     var dailyCarbsGoal: Int? {
-        guard let dailyKcalGoal, let dailyProteinGoal, let dailyFatGoal else { return nil }
+        guard let dailyKcalGoal, let dailyProteinGoal, let dailyFatGoal else { return baselineCarbsGoal }
         let remaining = Double(dailyKcalGoal) - Double(dailyProteinGoal * 4) - Double(dailyFatGoal * 9)
         return max(0, Int((remaining / 4).rounded()))
     }
 
-    // MARK: - Micros (USDA / WHO / AHA reference intakes)
+    // MARK: - Micros — baseline preferred, fallbacks via reference intakes
 
-    /// Daily fiber target — Institute of Medicine: 14 g per 1,000 kcal.
-    /// Falls back to 25 g (women) / 38 g (men) if kcal goal is missing.
+    /// Daily fiber. AI baseline first, otherwise IOM 14 g per 1,000 kcal.
     var dailyFiberGoal: Int? {
+        if let b = baselineFiberGoal { return b }
         if let kcal = dailyKcalGoal {
             return Int((Double(kcal) * 14.0 / 1000.0).rounded())
         }
@@ -332,14 +470,26 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         }
     }
 
-    /// Daily added-sugar ceiling — WHO < 10% of energy (we surface as
-    /// "left", lower is better). 50 g for a 2000 kcal diet.
+    /// Daily added-sugar ceiling. AI baseline first, otherwise WHO < 10%.
     var dailySugarGoal: Int? {
+        if let b = baselineSugarGoal { return b }
         guard let kcal = dailyKcalGoal else { return 50 }
         return Int((Double(kcal) * 0.10 / 4.0).rounded())
     }
 
-    /// Daily sodium ceiling — American Heart Association ideal: 1,500 mg.
-    /// Use 2,300 mg as the practical cap most people are tracked against.
-    var dailySodiumGoal: Int? { 2_300 }
+    /// Daily sodium ceiling. AI baseline first, otherwise AHA 2,300 mg.
+    var dailySodiumGoal: Int? { baselineSodiumGoal ?? 2_300 }
+
+    // MARK: - Plan freshness
+
+    /// True when any of the stats that drove the baseline plan differ
+    /// meaningfully from current state. Used as a hint to nudge the user
+    /// to regenerate the plan from their profile settings.
+    var planNeedsRefresh: Bool {
+        guard baselineKcalGoal != nil else { return false }   // never had a plan; not stale
+        if let bw = baselineWeightKg, let cw = weightKg, abs(bw - cw) >= 5 { return true }
+        if baselineGoal != goal { return true }
+        if baselineActivity != activityLevel { return true }
+        return false
+    }
 }

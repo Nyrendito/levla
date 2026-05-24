@@ -23,6 +23,8 @@ struct OnboardingView: View {
     @State private var activity: ActivityLevel = .moderate
     @State private var goal: UserGoal = .maintain
     @State private var saving: Bool = false
+    /// Drives the "Building your personalised plan…" full-screen overlay.
+    @State private var generatingPlan: Bool = false
 
     private let totalSteps = 6
 
@@ -51,7 +53,15 @@ struct OnboardingView: View {
                     .padding(.horizontal, L.S.pad)
                     .padding(.bottom, 24)
             }
+
+            // Full-screen "Building your personalised plan…" overlay shown
+            // while generate-meal-plan runs at the very end of onboarding.
+            if generatingPlan {
+                PlanGenerationOverlay()
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: generatingPlan)
     }
 
     // MARK: - Top progress
@@ -259,11 +269,84 @@ struct OnboardingView: View {
         updated.weightKg = (weightKg * 10).rounded() / 10
         updated.activityLevel = activity
         updated.goal = goal
-        updated.onboarded = true
+        // Don't mark onboarded yet — wait until the AI plan is generated
+        // so the user lands on the home screen with personalised targets
+        // already in place.
+        updated.onboarded = false
 
         await app.profileService.save(updated)
-        // Re-run recipe suggestions now that we have a personalization profile.
+
+        // Show the "Building your plan…" full-screen overlay while the AI
+        // designs the user's daily nutrition plan.
+        withAnimation { generatingPlan = true }
+        _ = await app.profileService.generatePlan(for: updated)
+
+        // Mark onboarded only after the plan persists, so RootView won't
+        // route to MainTabView until everything is ready.
+        if var withPlan = app.profileService.profile ?? Optional(updated) {
+            withPlan.onboarded = true
+            await app.profileService.save(withPlan)
+        }
+
+        // Re-run recipe suggestions now that we have a personalisation
+        // profile + AI plan to bias them by.
         await app.recipes.reload(for: app.fridge.items, profile: app.currentProfile, force: true)
+
+        withAnimation { generatingPlan = false }
+    }
+}
+
+/// Full-screen overlay shown while the AI is building the user's daily
+/// nutrition plan. Three rotating sentences hint at what's happening so
+/// the wait (typically 4-8 seconds) doesn't feel empty.
+private struct PlanGenerationOverlay: View {
+    @State private var idx: Int = 0
+    private let lines = [
+        "Reading your stats…",
+        "Designing your daily targets…",
+        "Tuning macros for your goal…",
+        "Finalising your plan…",
+    ]
+
+    var body: some View {
+        ZStack {
+            L.paper.ignoresSafeArea()
+            VStack(spacing: 22) {
+                ZStack {
+                    Circle().fill(L.brandBg).frame(width: 110, height: 110)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundStyle(L.brand)
+                        .symbolEffect(.pulse.byLayer, options: .repeat(.continuous))
+                }
+                VStack(spacing: 8) {
+                    Text("Building your personalised plan")
+                        .font(.manrope(20, .heavy))
+                        .kerning(-0.4)
+                        .foregroundStyle(L.ink)
+                        .multilineTextAlignment(.center)
+                    Text(lines[idx])
+                        .font(.manrope(13, .heavy))
+                        .tracking(0.3)
+                        .foregroundStyle(L.muted)
+                        .id("line-\(idx)")
+                        .transition(.opacity)
+                }
+                ProgressView()
+                    .tint(L.brand)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 32)
+        }
+        .task {
+            // Rotate the sentence every 2s while we wait for the LLM.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    idx = (idx + 1) % lines.count
+                }
+            }
+        }
     }
 }
 

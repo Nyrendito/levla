@@ -11,6 +11,9 @@ struct RecipeDetailView: View {
     @State private var cooking = false
     @State private var stepIdx = 0
     @State private var addedToShoppingCount = 0
+    /// Pushed when Start cooking is tapped — full-screen step-by-step
+    /// guide that ends with a Log this meal CTA.
+    @State private var presentingCookFlow = false
 
     /// LLM returns ingredient amounts for a base serving count. We assume 2
     /// (the same as the stepper's default), and scale the displayed amount
@@ -170,58 +173,22 @@ struct RecipeDetailView: View {
                 .padding(.bottom, 22)
         }
         .background(L.paper.ignoresSafeArea())
-    }
-
-    // MARK: - Sticky CTA — three-stage flow
-
-    /// Three-state bottom button so the user only "logs" the meal when
-    /// they actually finish cooking. The old single CTA wrote a
-    /// cooked_entries row the moment they tapped "Start cooking" — which
-    /// inflated today's macros for recipes they just glanced at.
-    ///
-    /// State machine:
-    ///   .notStarted → "Start cooking"           → enters cooking mode at step 1, adds missing to shopping
-    ///   .cooking    → "Next step"               → advances stepIdx
-    ///   .cooking @ final step → "Log this meal" → writes the cooked_entry (servings-scaled)
-    ///   .logged     → "Logged ✓" (disabled)        → confirmation; closes after delay
-    @ViewBuilder
-    private var stickyCTA: some View {
-        switch cookingPhase {
-        case .notStarted:
-            BigCTA(title: "Start cooking", icon: "flame", kind: .primary) {
-                cooking = true
-                stepIdx = 0
-                addMissingToShoppingList()
-            }
-        case .cooking:
-            BigCTA(title: "Next step", icon: "arrowR", kind: .ink) {
-                stepIdx = min(stepIdx + 1, recipe.steps.count - 1)
-            }
-        case .readyToLog:
-            BigCTA(title: "Log this meal", icon: "check", kind: .primary) {
-                logCookedEntry()
-            }
-        case .logged:
-            BigCTA(title: "Logged ✓", icon: nil, kind: .light) { onClose() }
+        .fullScreenCover(isPresented: $presentingCookFlow) {
+            CookingFlowView(recipe: recipe, servings: servings)
         }
     }
 
-    private enum CookingPhase { case notStarted, cooking, readyToLog, logged }
+    // MARK: - Sticky CTA — single Start cooking that pushes CookingFlow
 
-    private var cookingPhase: CookingPhase {
-        if didLog { return .logged }
-        guard cooking else { return .notStarted }
-        if stepIdx >= recipe.steps.count - 1 { return .readyToLog }
-        return .cooking
-    }
-
-    @State private var didLog = false
-
-    private func logCookedEntry() {
-        guard let uid = app.auth.currentUserId, !didLog else { return }
-        Task {
-            await app.cooked.log(recipe: recipe, servings: servings, userId: uid)
-            didLog = true
+    /// Bottom button: opens the dedicated CookingFlowView. Cooking + log-
+    /// meal both happen there. Tapping the CTA on the detail screen DOES
+    /// NOT write a cooked_entries row by itself — only finishing the flow
+    /// and tapping "Log this meal" does.
+    @ViewBuilder
+    private var stickyCTA: some View {
+        BigCTA(title: "Start cooking", icon: "flame", kind: .primary) {
+            addMissingToShoppingList()
+            presentingCookFlow = true
         }
     }
 
@@ -254,9 +221,33 @@ struct RecipeDetailView: View {
                 NutrientRow(label: "Kcal",    value: "\(recipe.kcal) kcal", isLast: false)
                 NutrientRow(label: "Protein", value: "\(recipe.protein) g", isLast: false)
                 NutrientRow(label: "Carbs",   value: "\(recipe.carbs) g",   isLast: false)
-                NutrientRow(label: "Fat",     value: "\(recipe.fat) g",     isLast: true)
+                NutrientRow(label: "Fat",     value: "\(recipe.fat) g",     isLast: false)
+                // Micros — estimated by the same kitchen heuristics the
+                // analyze-meal model uses; surfaced so users tracking sugar/
+                // sodium see the figure before they cook.
+                NutrientRow(label: "Fiber",   value: "\(estimatedFiber) g",      isLast: false)
+                NutrientRow(label: "Sugar",   value: "\(estimatedSugar) g",      isLast: false)
+                NutrientRow(label: "Sodium",  value: "\(estimatedSodium) mg",    isLast: true)
             }
         }
+    }
+
+    // Rough recipe-time micronutrient estimates derived from the carb,
+    // fat and protein profile. suggest-recipes doesn't return micros yet
+    // (would push the LLM output above the strict-schema size limit),
+    // so we approximate using typical-per-100g lookups: ~14g fiber / 1000
+    // kcal (IOM), ~5g of carbs as sugar by default, sodium scales with
+    // kcal at ~300mg per 1000kcal for home cooking. Once a meal is
+    // actually logged via the cooking flow we use the recipe's own carbs
+    // (which already account for the recipe's character).
+    private var estimatedFiber: Int {
+        Int((Double(recipe.kcal) * 14.0 / 1000.0).rounded())
+    }
+    private var estimatedSugar: Int {
+        max(0, Int(Double(recipe.carbs) * 0.10))
+    }
+    private var estimatedSodium: Int {
+        Int((Double(recipe.kcal) * 0.3).rounded())
     }
 
     // MARK: - Reason / shopping / ingredient row
