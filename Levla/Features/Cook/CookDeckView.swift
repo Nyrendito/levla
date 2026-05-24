@@ -210,88 +210,42 @@ private struct SwipeCard: View {
     private func cardContent(size: CGSize) -> some View {
         ZStack {
             FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: size.height, radius: L.R.xxl, recipe: recipe)
+
+            // Bottom-only gradient — much shorter so the photo dominates
+            // the top 2/3 of the card.
             LinearGradient(
-                colors: [.clear, Color(hex: 0x140F0A).opacity(0.30), Color(hex: 0x140F0A).opacity(0.78)],
+                colors: [.clear, .clear, Color(hex: 0x140F0A).opacity(0.55), Color(hex: 0x140F0A).opacity(0.82)],
                 startPoint: .top, endPoint: .bottom
             )
             .allowsHitTesting(false)
 
+            // Single match chip in the top-right corner. No clock badge,
+            // no tags — those crowded the photo. Time + missing live in
+            // the compact stat line at the bottom.
             VStack {
                 HStack {
-                    if match.matchPct == 100 {
-                        HStack(spacing: 6) {
-                            LSymbol(key: "check", size: 13, weight: .heavy)
-                            Text("All in fridge")
-                        }
-                        .font(.manrope(13, .heavy))
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(L.mint, in: Capsule())
-                        .foregroundStyle(L.cream)
-                        .shadow(color: L.mint.opacity(0.32), radius: 8, x: 0, y: 4)
-                    } else {
-                        Text("\(match.matchPct)% match")
-                            .font(.manrope(13, .heavy))
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(L.pop, in: Capsule())
-                            .foregroundStyle(L.cream)
-                            .shadow(color: L.pop.opacity(0.32), radius: 8, x: 0, y: 4)
-                    }
                     Spacer()
-                    HStack(spacing: 5) {
-                        LSymbol(key: "clock", size: 13, weight: .heavy)
-                        Text("\(recipe.timeMinutes)m")
-                    }
-                    .font(.manrope(12.5, .heavy))
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(L.cream.opacity(0.85), in: Capsule())
-                    .foregroundStyle(L.ink)
+                    matchChip
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
 
                 Spacer()
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        ForEach(recipe.tags.prefix(3), id: \.self) { t in
-                            Text(t)
-                                .font(.manrope(11, .bold))
-                                .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(L.cream.opacity(0.18), in: Capsule())
-                                .foregroundStyle(L.cream)
-                        }
-                    }
+                // Compact bottom block: title + one inline stat line.
+                VStack(alignment: .leading, spacing: 8) {
                     Text(recipe.title)
-                        .font(.manrope(30, .heavy))
-                        .kerning(-1)
+                        .font(.manrope(24, .heavy))
+                        .kerning(-0.6)
                         .foregroundStyle(L.cream)
                         .lineLimit(2)
-                    Text(recipe.subtitle)
-                        .font(.manrope(14, .medium))
-                        .foregroundStyle(L.cream.opacity(0.78))
+                        .multilineTextAlignment(.leading)
 
-                    HStack(spacing: 16) {
-                        HStack(spacing: 5) {
-                            LSymbol(key: "flame", size: 14, weight: .semibold)
-                            Text("\(recipe.kcal) kcal")
-                        }
-                        Text("\(recipe.protein)g protein")
-                        if !match.missingIngredients.isEmpty {
-                            HStack(spacing: 5) {
-                                LSymbol(key: "cart", size: 13, weight: .semibold)
-                                Text("\(match.missingIngredients.count) to buy")
-                            }
-                            .foregroundStyle(L.pop)
-                        }
-                    }
-                    .font(.manrope(13, .bold))
-                    .foregroundStyle(L.cream.opacity(0.88))
-                    HStack(spacing: 4) {
-                        Text("Tap for recipe")
-                        LSymbol(key: "arrowR", size: 12, weight: .heavy)
-                    }
-                    .font(.manrope(12, .bold))
-                    .foregroundStyle(L.cream.opacity(0.7))
+                    statLine
                 }
-                .padding(22)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             stamp("SKIP", color: L.pop, rotate: -12, opacity: noOpacity, alignment: .topLeading, offset: .init(width: 24, height: 36))
@@ -301,6 +255,47 @@ private struct SwipeCard: View {
         .frame(width: size.width, height: size.height)
         .clipShape(RoundedRectangle(cornerRadius: L.R.xxl, style: .continuous))
         .shadow(color: L.ink.opacity(0.18), radius: 30, x: 0, y: 14)
+    }
+
+    /// Single chip top-right — green when all in fridge, coral otherwise.
+    @ViewBuilder
+    private var matchChip: some View {
+        if match.matchPct == 100 {
+            HStack(spacing: 5) {
+                LSymbol(key: "check", size: 11, weight: .heavy)
+                Text("In your fridge")
+            }
+            .font(.manrope(11.5, .heavy))
+            .tracking(0.2)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(L.mint, in: Capsule())
+            .foregroundStyle(L.cream)
+        } else {
+            Text("\(match.missingIngredients.count) to buy")
+                .font(.manrope(11.5, .heavy))
+                .tracking(0.2)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(L.pop, in: Capsule())
+                .foregroundStyle(L.cream)
+        }
+    }
+
+    /// One row of small inline stats: kcal · time. Nothing else.
+    private var statLine: some View {
+        HStack(spacing: 14) {
+            HStack(spacing: 4) {
+                LSymbol(key: "flame", size: 11, weight: .heavy)
+                Text("\(recipe.kcal) kcal")
+            }
+            Text("·").foregroundStyle(L.cream.opacity(0.4))
+            HStack(spacing: 4) {
+                LSymbol(key: "clock", size: 11, weight: .heavy)
+                Text("\(recipe.timeMinutes) min")
+            }
+        }
+        .font(.manrope(12, .heavy))
+        .tracking(0.2)
+        .foregroundStyle(L.cream.opacity(0.92))
     }
 
     private func stamp(_ text: String, color: Color, rotate: Double, opacity: Double, alignment: Alignment, offset: CGSize, bg: Color = .clear) -> some View {

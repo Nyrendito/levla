@@ -9,36 +9,50 @@ struct FoodPalette {
 
     static let table: [String: FoodPalette] = [
         // dairy
-        "milk":     .init(bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xFAFAF6), rim: .init(hex: 0xE2DCC8), label: "milk"),
-        "yogurt":   .init(bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xF4EFE2), rim: .init(hex: 0xD9C99A), label: "yogurt"),
-        "butter":   .init(bg: .init(hex: 0xF4E9C9), fg: .init(hex: 0xE9C770), rim: .init(hex: 0xC9A23E), label: "butter"),
-        "feta":     .init(bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xF8F4EA), rim: .init(hex: 0xD8CFB6), label: "feta"),
-        "egg":      .init(bg: .init(hex: 0xF0E9D6), fg: .init(hex: 0xE9DAA8), rim: .init(hex: 0xC9A648), label: "eggs"),
-        // veg
-        "spinach":  .init(bg: .init(hex: 0xE1E9D2), fg: .init(hex: 0x6E8C4A), rim: .init(hex: 0x3F5E2A), label: "spinach"),
-        "broccoli": .init(bg: .init(hex: 0xDCE6CC), fg: .init(hex: 0x5C7E40), rim: .init(hex: 0x3F5827), label: "broccoli"),
-        "tomato":   .init(bg: .init(hex: 0xF3D6C6), fg: .init(hex: 0xC9543C), rim: .init(hex: 0x8D2C20), label: "tomato"),
-        "carrot":   .init(bg: .init(hex: 0xF4DCC0), fg: .init(hex: 0xD4773A), rim: .init(hex: 0x9A4E20), label: "carrot"),
-        "pepper":   .init(bg: .init(hex: 0xF1DBC4), fg: .init(hex: 0xD6692A), rim: .init(hex: 0x933B0E), label: "pepper"),
-        "lemon":    .init(bg: .init(hex: 0xF4ECC0), fg: .init(hex: 0xE9C946), rim: .init(hex: 0xA98E1C), label: "lemon"),
-        "garlic":   .init(bg: .init(hex: 0xEDE6D6), fg: .init(hex: 0xE9DFC2), rim: .init(hex: 0xB6A573), label: "garlic"),
-        "onion":    .init(bg: .init(hex: 0xF1E6D0), fg: .init(hex: 0xD9B779), rim: .init(hex: 0x946B30), label: "onion"),
-        "avocado":  .init(bg: .init(hex: 0xE0E5C7), fg: .init(hex: 0x7E904A), rim: .init(hex: 0x3F4F1F), label: "avocado"),
-        // meat
-        "chicken":  .init(bg: .init(hex: 0xF2E5D2), fg: .init(hex: 0xEBD3A8), rim: .init(hex: 0xB8884A), label: "chicken"),
-        "salmon":   .init(bg: .init(hex: 0xF4DCC8), fg: .init(hex: 0xE59873), rim: .init(hex: 0xA6512B), label: "salmon"),
-        "beef":     .init(bg: .init(hex: 0xEFD6CB), fg: .init(hex: 0xB65C4A), rim: .init(hex: 0x762924), label: "beef"),
+        "milk":         .init(bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xFAFAF6), rim: .init(hex: 0xE2DCC8), label: "milk"),
+        "yogurt":       .init(bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xF4EFE2), rim: .init(hex: 0xD9C99A), label: "yogurt"),
+        "butter":       .init(bg: .init(hex: 0xF4E9C9), fg: .init(hex: 0xE9C770), rim: .init(hex: 0xC9A23E), label: "butter"),
+        "feta":         .init(bg: .init(hex: 0xF1ECE0), fg: .init(hex: 0xF8F4EA), rim: .init(hex: 0xD8CFB6), label: "feta"),
+        "egg":          .init(bg: .init(hex: 0xF0E9D6), fg: .init(hex: 0xE9DAA8), rim: .init(hex: 0xC9A648), label: "eggs"),
+        "cream":        .init(bg: .init(hex: 0xF4EFE2), fg: .init(hex: 0xFDFAEF), rim: .init(hex: 0xE4D9B8), label: "cream"),
+        "cheese":       .init(bg: .init(hex: 0xF4E4B8), fg: .init(hex: 0xE5C870), rim: .init(hex: 0xB39038), label: "cheese"),
+        // vegetables
+        "spinach":      .init(bg: .init(hex: 0xE1E9D2), fg: .init(hex: 0x6E8C4A), rim: .init(hex: 0x3F5E2A), label: "spinach"),
+        "broccoli":     .init(bg: .init(hex: 0xDCE6CC), fg: .init(hex: 0x5C7E40), rim: .init(hex: 0x3F5827), label: "broccoli"),
+        "tomato":       .init(bg: .init(hex: 0xF3D6C6), fg: .init(hex: 0xC9543C), rim: .init(hex: 0x8D2C20), label: "tomato"),
+        "carrot":       .init(bg: .init(hex: 0xF4DCC0), fg: .init(hex: 0xD4773A), rim: .init(hex: 0x9A4E20), label: "carrot"),
+        "pepper":       .init(bg: .init(hex: 0xF1DBC4), fg: .init(hex: 0xD6692A), rim: .init(hex: 0x933B0E), label: "pepper"),
+        "lemon":        .init(bg: .init(hex: 0xF4ECC0), fg: .init(hex: 0xE9C946), rim: .init(hex: 0xA98E1C), label: "lemon"),
+        "lime":         .init(bg: .init(hex: 0xE3EBC0), fg: .init(hex: 0xB7CE3F), rim: .init(hex: 0x6E8420), label: "lime"),
+        "garlic":       .init(bg: .init(hex: 0xEDE6D6), fg: .init(hex: 0xE9DFC2), rim: .init(hex: 0xB6A573), label: "garlic"),
+        "ginger":       .init(bg: .init(hex: 0xF1E5C8), fg: .init(hex: 0xD8BA75), rim: .init(hex: 0x95722B), label: "ginger"),
+        "onion":        .init(bg: .init(hex: 0xF1E6D0), fg: .init(hex: 0xD9B779), rim: .init(hex: 0x946B30), label: "onion"),
+        "avocado":      .init(bg: .init(hex: 0xE0E5C7), fg: .init(hex: 0x7E904A), rim: .init(hex: 0x3F4F1F), label: "avocado"),
+        "potato":       .init(bg: .init(hex: 0xEAE0CC), fg: .init(hex: 0xC4A06B), rim: .init(hex: 0x7A5527), label: "potato"),
+        "sweet-potato": .init(bg: .init(hex: 0xF1D6BC), fg: .init(hex: 0xCC7A45), rim: .init(hex: 0x83401A), label: "sweet potato"),
+        "mushroom":     .init(bg: .init(hex: 0xEFE7DA), fg: .init(hex: 0xD5C2A1), rim: .init(hex: 0x8C7349), label: "mushroom"),
+        "cucumber":     .init(bg: .init(hex: 0xDCE8D4), fg: .init(hex: 0x6F8E5A), rim: .init(hex: 0x3D5A2A), label: "cucumber"),
+        "zucchini":     .init(bg: .init(hex: 0xDDE9D2), fg: .init(hex: 0x77965A), rim: .init(hex: 0x3D5C24), label: "zucchini"),
+        "lettuce":      .init(bg: .init(hex: 0xDFEACD), fg: .init(hex: 0x8AAA56), rim: .init(hex: 0x4F6E26), label: "lettuce"),
+        "cabbage":      .init(bg: .init(hex: 0xE0EAD6), fg: .init(hex: 0x90AC6E), rim: .init(hex: 0x53723A), label: "cabbage"),
+        // proteins
+        "chicken":      .init(bg: .init(hex: 0xF2E5D2), fg: .init(hex: 0xEBD3A8), rim: .init(hex: 0xB8884A), label: "chicken"),
+        "salmon":       .init(bg: .init(hex: 0xF4DCC8), fg: .init(hex: 0xE59873), rim: .init(hex: 0xA6512B), label: "salmon"),
+        "beef":         .init(bg: .init(hex: 0xEFD6CB), fg: .init(hex: 0xB65C4A), rim: .init(hex: 0x762924), label: "beef"),
+        "tuna":         .init(bg: .init(hex: 0xEFD0CB), fg: .init(hex: 0xC55449), rim: .init(hex: 0x712622), label: "tuna"),
+        "shrimp":       .init(bg: .init(hex: 0xF4D9D0), fg: .init(hex: 0xE48774), rim: .init(hex: 0xA64A33), label: "shrimp"),
+        "tofu":         .init(bg: .init(hex: 0xF1ECDC), fg: .init(hex: 0xF1ECD8), rim: .init(hex: 0xD5C9A4), label: "tofu"),
         // pantry
-        "rice":     .init(bg: .init(hex: 0xEFEADB), fg: .init(hex: 0xF1EAD0), rim: .init(hex: 0xC9B98C), label: "rice"),
-        "pasta":    .init(bg: .init(hex: 0xF0E7CE), fg: .init(hex: 0xDCC58A), rim: .init(hex: 0x9A8348), label: "pasta"),
-        "oil":      .init(bg: .init(hex: 0xF2E4B8), fg: .init(hex: 0xD5B354), rim: .init(hex: 0x917423), label: "olive oil"),
-        "bread":    .init(bg: .init(hex: 0xF0DFB7), fg: .init(hex: 0xD5A664), rim: .init(hex: 0x8E5C28), label: "bread"),
+        "rice":         .init(bg: .init(hex: 0xEFEADB), fg: .init(hex: 0xF1EAD0), rim: .init(hex: 0xC9B98C), label: "rice"),
+        "pasta":        .init(bg: .init(hex: 0xF0E7CE), fg: .init(hex: 0xDCC58A), rim: .init(hex: 0x9A8348), label: "pasta"),
+        "oil":          .init(bg: .init(hex: 0xF2E4B8), fg: .init(hex: 0xD5B354), rim: .init(hex: 0x917423), label: "olive oil"),
+        "bread":        .init(bg: .init(hex: 0xF0DFB7), fg: .init(hex: 0xD5A664), rim: .init(hex: 0x8E5C28), label: "bread"),
         // drinks
-        "wine":     .init(bg: .init(hex: 0xF1D8D5), fg: .init(hex: 0x7B2F3A), rim: .init(hex: 0x3D1419), label: "wine"),
-        "water":    .init(bg: .init(hex: 0xE4EAEC), fg: .init(hex: 0xC7D7DC), rim: .init(hex: 0x7E9098), label: "water"),
+        "wine":         .init(bg: .init(hex: 0xF1D8D5), fg: .init(hex: 0x7B2F3A), rim: .init(hex: 0x3D1419), label: "wine"),
+        "water":        .init(bg: .init(hex: 0xE4EAEC), fg: .init(hex: 0xC7D7DC), rim: .init(hex: 0x7E9098), label: "water"),
         // misc
-        "pesto":    .init(bg: .init(hex: 0xDEE5C9), fg: .init(hex: 0x637840), rim: .init(hex: 0x33421E), label: "pesto"),
-        "parmesan": .init(bg: .init(hex: 0xF1E6C2), fg: .init(hex: 0xE1C77B), rim: .init(hex: 0x9F7F2D), label: "parmesan"),
+        "pesto":        .init(bg: .init(hex: 0xDEE5C9), fg: .init(hex: 0x637840), rim: .init(hex: 0x33421E), label: "pesto"),
+        "parmesan":     .init(bg: .init(hex: 0xF1E6C2), fg: .init(hex: 0xE1C77B), rim: .init(hex: 0x9F7F2D), label: "parmesan"),
     ]
 
     static func palette(for key: String) -> FoodPalette {
@@ -213,16 +227,24 @@ struct FoodOrb: View {
         .task(id: recipe?.slug) {
             // Skip if the caller already supplied an imageURL.
             guard imageURL == nil else { return }
-            // Skip if we already resolved this recipe.
-            guard resolvedURL == nil else { return }
+            // Always clear before fetching the new one — otherwise stale
+            // URLs from the previous recipe linger half-swipe in the Cook
+            // deck (the @State persists across recipe identity changes).
+            resolvedURL = nil
             // Only auto-fetch when we have a recipe; otherwise fall back.
             guard let recipe else { return }
-            resolvedURL = await ImageCacheService.shared.imageURL(
+            let fetched = await ImageCacheService.shared.imageURL(
                 kind: .recipe,
                 key: recipe.slug,
                 title: recipe.title,
                 uses: recipe.uses
             )
+            // Guard against a late return from a previous fetch racing
+            // ahead of the current recipe — only commit if the task wasn't
+            // cancelled in flight.
+            if !Task.isCancelled {
+                resolvedURL = fetched
+            }
         }
     }
 

@@ -212,13 +212,22 @@ enum AIScanError: LocalizedError {
 // MARK: - Helpers
 
 private let knownFoodKeys: Set<String> = [
-    "milk","yogurt","butter","feta","egg","spinach","broccoli","tomato","carrot",
-    "pepper","lemon","garlic","onion","avocado","chicken","salmon","beef","rice",
-    "pasta","oil","bread","pesto","parmesan","wine","water",
+    // dairy
+    "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese",
+    // vegetables
+    "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "lime",
+    "garlic", "ginger", "onion", "avocado", "potato", "sweet-potato",
+    "mushroom", "cucumber", "zucchini", "lettuce", "cabbage",
+    // proteins
+    "chicken", "salmon", "beef", "tuna", "shrimp", "tofu",
+    // pantry
+    "rice", "pasta", "oil", "bread", "pesto", "parmesan",
+    // drinks
+    "wine", "water",
 ]
 
 private func normalizedFoodKey(_ raw: String) -> String {
-    let lower = raw.lowercased()
+    let lower = raw.lowercased().replacingOccurrences(of: " ", with: "-")
     if knownFoodKeys.contains(lower) { return lower }
     // If the LLM hallucinated a plural / variant, snap it to the closest match.
     for key in knownFoodKeys where lower.contains(key) { return key }
@@ -227,12 +236,20 @@ private func normalizedFoodKey(_ raw: String) -> String {
 
 private func defaultCategory(for foodKey: String) -> FoodCategory {
     switch foodKey {
-    case "milk", "yogurt", "butter", "feta", "egg": return .dairy
-    case "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "garlic", "onion", "avocado": return .vegetables
-    case "chicken", "salmon", "beef": return .meat
-    case "rice", "pasta", "oil", "bread", "pesto", "parmesan": return .pantry
-    case "wine", "water": return .drinks
-    default: return .pantry
+    case "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese":
+        return .dairy
+    case "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "lime",
+         "garlic", "ginger", "onion", "avocado", "potato", "sweet-potato",
+         "mushroom", "cucumber", "zucchini", "lettuce", "cabbage":
+        return .vegetables
+    case "chicken", "salmon", "beef", "tuna", "shrimp", "tofu":
+        return .meat
+    case "rice", "pasta", "oil", "bread", "pesto", "parmesan":
+        return .pantry
+    case "wine", "water":
+        return .drinks
+    default:
+        return .pantry
     }
 }
 

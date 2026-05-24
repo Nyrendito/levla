@@ -4,10 +4,17 @@
 // schema exactly — no drifting field names, no number-as-string surprises.
 
 export const FOOD_KEYS = [
-  "milk", "yogurt", "butter", "feta", "egg",
-  "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "garlic", "onion", "avocado",
-  "chicken", "salmon", "beef",
+  // dairy
+  "milk", "yogurt", "butter", "feta", "egg", "cream", "cheese",
+  // vegetables
+  "spinach", "broccoli", "tomato", "carrot", "pepper", "lemon", "lime",
+  "garlic", "ginger", "onion", "avocado", "potato", "sweet-potato",
+  "mushroom", "cucumber", "zucchini", "lettuce", "cabbage",
+  // proteins
+  "chicken", "salmon", "beef", "tuna", "shrimp", "tofu",
+  // pantry
   "rice", "pasta", "oil", "bread", "pesto", "parmesan",
+  // drinks
   "wine", "water",
 ] as const;
 
