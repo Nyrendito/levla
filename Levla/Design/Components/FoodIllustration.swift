@@ -118,19 +118,44 @@ struct FoodIllustration: View {
     }
 }
 
-/// Small rounded food "tile": colored bg square + a centered FoodIllustration.
+/// Small rounded food "tile". When a generated image URL has been resolved
+/// for this food key it's shown (Cal-AI-style real photo on white); otherwise
+/// the abstract illustration over a tinted square renders.
 struct FoodTile: View {
     let food: String
     var size: CGFloat = 44
     var radius: CGFloat = 14
 
+    @State private var imageURL: URL?
+
     var body: some View {
         let f = FoodPalette.palette(for: food)
         ZStack {
-            RoundedRectangle(cornerRadius: radius, style: .continuous).fill(f.bg)
-            FoodIllustration(food: food, size: size * 0.78)
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                    default:
+                        FoodIllustration(food: food, size: size * 0.78)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(f.bg)
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: radius, style: .continuous).fill(f.bg)
+                FoodIllustration(food: food, size: size * 0.78)
+            }
         }
         .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .task {
+            // Best-effort. Returns nil instantly in offline / no-image-gen
+            // setups so we keep rendering the illustration with zero cost.
+            if imageURL == nil {
+                imageURL = await ImageCacheService.shared.imageURL(kind: .food, key: food)
+            }
+        }
     }
 }
 

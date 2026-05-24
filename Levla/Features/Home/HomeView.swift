@@ -12,11 +12,39 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var openedRecipe: Recipe?
+    @State private var mealPage: Int = 0
 
     private var matches: [RecipeMatch] {
         RecipeMatcher.rank(recipes: app.recipes.recipes, fridge: app.fridge.items)
     }
-    private var topRecipe: RecipeMatch? { matches.first }
+
+    /// 3-page carousel: best breakfast, best lunch, best dinner.
+    /// Each page is the top-ranked recipe for that meal type.
+    private var dailyMeals: [RecipeMatch] {
+        let order: [MealType] = [.breakfast, .lunch, .dinner]
+        return order.compactMap { type in
+            matches.first(where: { $0.recipe.mealType == type })
+        }
+    }
+
+    /// Pick the index that matches the user's current time of day.
+    /// 5:00-10:59 → breakfast (0)
+    /// 11:00-15:59 → lunch (1)
+    /// 16:00-04:59 → dinner (2)
+    private var currentMealIndex: Int {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5...10:  return 0
+        case 11...15: return 1
+        default:      return 2
+        }
+    }
+
+    private var currentMealLabel: String {
+        let index = min(mealPage, max(0, dailyMeals.count - 1))
+        guard dailyMeals.indices.contains(index) else { return "WHAT TO COOK" }
+        return dailyMeals[index].recipe.mealType.displayName.uppercased() + " TODAY"
+    }
 
     private var recentlyAdded: [FoodItem] {
         Array(
@@ -41,13 +69,17 @@ struct HomeView: View {
                 .padding(.horizontal, L.S.pad)
                 .padding(.top, 22)
 
-                if !app.fridge.items.isEmpty, let m = topRecipe {
-                    sectionLabel("COOK TONIGHT")
+                if !app.fridge.items.isEmpty, !dailyMeals.isEmpty {
+                    sectionLabel(currentMealLabel)
                         .padding(.horizontal, L.S.pad)
                         .padding(.top, 30)
-                    FeaturedRecipeCard(match: m) { openedRecipe = m.recipe }
-                        .padding(.horizontal, L.S.pad)
-                        .padding(.top, 10)
+
+                    MealCarousel(
+                        meals: dailyMeals,
+                        page: $mealPage,
+                        onOpen: { openedRecipe = $0 }
+                    )
+                    .padding(.top, 10)
                 } else if app.fridge.items.isEmpty {
                     EmptyFridgeHint()
                         .padding(.horizontal, L.S.pad)
@@ -77,6 +109,7 @@ struct HomeView: View {
                 await app.cooked.reloadToday(userId: uid)
             }
             await app.recipes.reload(for: app.fridge.items)
+            mealPage = currentMealIndex
         }
     }
 
@@ -128,6 +161,38 @@ struct HomeView: View {
             .font(.mono(11)).tracking(1.2)
             .foregroundStyle(L.ink.opacity(0.4))
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Meal carousel (3-page swipeable)
+
+private struct MealCarousel: View {
+    let meals: [RecipeMatch]
+    @Binding var page: Int
+    let onOpen: (Recipe) -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            TabView(selection: $page) {
+                ForEach(Array(meals.enumerated()), id: \.element.id) { (i, match) in
+                    FeaturedRecipeCard(match: match) { onOpen(match.recipe) }
+                        .padding(.horizontal, L.S.pad)
+                        .tag(i)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 320)
+
+            HStack(spacing: 7) {
+                ForEach(0..<meals.count, id: \.self) { i in
+                    Circle()
+                        .fill(i == page ? L.ink : L.ink.opacity(0.20))
+                        .frame(width: i == page ? 9 : 7, height: i == page ? 9 : 7)
+                        .animation(.easeInOut(duration: 0.18), value: page)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: page)
     }
 }
 

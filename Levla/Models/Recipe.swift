@@ -29,6 +29,19 @@ struct RecipeIngredient: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+enum MealType: String, Codable, Hashable, Sendable, CaseIterable {
+    case breakfast, lunch, dinner, snack
+
+    var displayName: String {
+        switch self {
+        case .breakfast: return "Breakfast"
+        case .lunch:     return "Lunch"
+        case .dinner:    return "Dinner"
+        case .snack:     return "Snack"
+        }
+    }
+}
+
 struct Recipe: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var slug: String
@@ -39,6 +52,7 @@ struct Recipe: Identifiable, Codable, Hashable, Sendable {
     var protein: Int
     var carbs: Int
     var fat: Int
+    var mealType: MealType
     var difficulty: String
     var matchPct: Int
     var missing: [String]
@@ -53,7 +67,9 @@ struct Recipe: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, slug, title, subtitle
         case timeMinutes = "time_minutes"
-        case kcal, protein, carbs, fat, difficulty
+        case kcal, protein, carbs, fat
+        case mealType = "meal_type"
+        case difficulty
         case matchPct = "match_pct"
         case missing, uses, why
         case colorHex = "color_hex"

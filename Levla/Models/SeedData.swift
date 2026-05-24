@@ -8,7 +8,7 @@ enum SeedData {
         Recipe(
             id: UUID(uuidString: "11111111-0000-0000-0000-000000000001")!,
             slug: "lem-salmon", title: "Lemon butter salmon", subtitle: "with crisp spinach",
-            timeMinutes: 22, kcal: 510, protein: 36, carbs: 14, fat: 32, difficulty: "Easy",
+            timeMinutes: 22, kcal: 510, protein: 36, carbs: 14, fat: 32, mealType: .dinner, difficulty: "Easy",
             matchPct: 100, missing: [],
             uses: ["salmon", "spinach", "lemon", "butter", "garlic"],
             why: "Your spinach should be used today.",
@@ -32,7 +32,7 @@ enum SeedData {
         Recipe(
             id: UUID(uuidString: "11111111-0000-0000-0000-000000000002")!,
             slug: "pasta-pesto", title: "Pesto pasta, blistered tomatoes", subtitle: "pantry-only weeknight",
-            timeMinutes: 16, kcal: 580, protein: 19, carbs: 78, fat: 22, difficulty: "Easy",
+            timeMinutes: 16, kcal: 580, protein: 19, carbs: 78, fat: 22, mealType: .lunch, difficulty: "Easy",
             matchPct: 100, missing: [],
             uses: ["pasta", "pesto", "tomato", "parmesan"],
             why: "You have everything for this.",
@@ -55,7 +55,7 @@ enum SeedData {
         Recipe(
             id: UUID(uuidString: "11111111-0000-0000-0000-000000000003")!,
             slug: "roast-veg", title: "Sheet-pan roast veg & feta", subtitle: "low effort, big flavor",
-            timeMinutes: 35, kcal: 460, protein: 18, carbs: 42, fat: 24, difficulty: "Easy",
+            timeMinutes: 35, kcal: 460, protein: 18, carbs: 42, fat: 24, mealType: .lunch, difficulty: "Easy",
             matchPct: 92, missing: ["Honey"],
             uses: ["broccoli", "carrot", "feta", "onion", "oil"],
             why: "Clears 4 fridge items.",
@@ -79,7 +79,7 @@ enum SeedData {
         Recipe(
             id: UUID(uuidString: "11111111-0000-0000-0000-000000000004")!,
             slug: "sour-toast", title: "Avocado sourdough, soft egg", subtitle: "8 minute breakfast",
-            timeMinutes: 8, kcal: 380, protein: 18, carbs: 36, fat: 18, difficulty: "Easy",
+            timeMinutes: 8, kcal: 380, protein: 18, carbs: 36, fat: 18, mealType: .breakfast, difficulty: "Easy",
             matchPct: 100, missing: [],
             uses: ["avocado", "bread", "egg", "lemon"],
             why: "Bread expires in 2 days.",
@@ -101,7 +101,7 @@ enum SeedData {
         Recipe(
             id: UUID(uuidString: "11111111-0000-0000-0000-000000000005")!,
             slug: "tomato-pasta", title: "Garlicky tomato spaghetti", subtitle: "pantry classic, 12 min",
-            timeMinutes: 12, kcal: 480, protein: 14, carbs: 76, fat: 14, difficulty: "Easy",
+            timeMinutes: 12, kcal: 480, protein: 14, carbs: 76, fat: 14, mealType: .dinner, difficulty: "Easy",
             matchPct: 100, missing: [],
             uses: ["pasta", "tomato", "garlic", "oil", "parmesan"],
             why: "Tonight, no thinking.",
@@ -124,7 +124,7 @@ enum SeedData {
         Recipe(
             id: UUID(uuidString: "11111111-0000-0000-0000-000000000006")!,
             slug: "frittata", title: "Fridge-clean frittata", subtitle: "whatever's leftover",
-            timeMinutes: 22, kcal: 360, protein: 24, carbs: 8, fat: 22, difficulty: "Easy",
+            timeMinutes: 22, kcal: 360, protein: 24, carbs: 8, fat: 22, mealType: .breakfast, difficulty: "Easy",
             matchPct: 100, missing: [],
             uses: ["egg", "spinach", "feta", "tomato", "onion"],
             why: "Clears 5 fridge items.",

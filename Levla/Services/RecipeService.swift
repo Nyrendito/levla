@@ -138,6 +138,9 @@ final class RecipeService {
                 )
             }
 
+            let mealTypeRaw = (str("mealType", "meal_type", "meal") ?? "dinner").lowercased()
+            let mealType = MealType(rawValue: mealTypeRaw) ?? .dinner
+
             return Recipe(
                 id: UUID(),
                 slug: slug,
@@ -148,6 +151,7 @@ final class RecipeService {
                 protein: int("protein", "protein_g") ?? 20,
                 carbs: int("carbs", "carbs_g") ?? 30,
                 fat: int("fat", "fat_g") ?? 15,
+                mealType: mealType,
                 difficulty: str("difficulty", "level") ?? "Easy",
                 matchPct: 0,
                 missing: [],
