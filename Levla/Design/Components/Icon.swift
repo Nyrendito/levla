@@ -44,6 +44,8 @@ enum LIcon {
         case "milk":         return "carton.fill"
         case "egg":          return "circle.fill"
         case "apple":        return "applelogo"
+        case "chart":        return "chart.bar.fill"
+        case "image":        return "photo.on.rectangle.angled"
         default:             return "circle"
         }
     }

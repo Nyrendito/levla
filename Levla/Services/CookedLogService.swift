@@ -8,6 +8,9 @@ import Supabase
 @Observable
 final class CookedLogService {
     private(set) var todayEntries: [CookedEntry] = []
+    /// Last ~120 days of entries, used by the Progress tab for streaks,
+    /// weekly charts, and macro hit-rate.
+    private(set) var historyEntries: [CookedEntry] = []
     private(set) var isLoading = false
 
     private let supabase = LevlaSupabase.shared
@@ -53,6 +56,35 @@ final class CookedLogService {
             todayEntries = rows
         } catch {
             // soft fail — show whatever we already had
+        }
+    }
+
+    /// Pulls the last ~120 days of entries. Backs the Progress tab.
+    /// Cheap on a per-user index.
+    func reloadHistory(userId: UUID, days: Int = 120) async {
+        if supabase.isOffline {
+            historyEntries = offlineStore
+            return
+        }
+        guard let client = supabase.client else { return }
+
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let cutoffISO = iso.string(from: cutoff)
+
+        do {
+            let rows: [CookedEntry] = try await client
+                .from("cooked_entries")
+                .select()
+                .eq("user_id", value: userId.uuidString)
+                .gte("cooked_at", value: cutoffISO)
+                .order("cooked_at", ascending: false)
+                .execute()
+                .value
+            historyEntries = rows
+        } catch {
+            // soft fail
         }
     }
 

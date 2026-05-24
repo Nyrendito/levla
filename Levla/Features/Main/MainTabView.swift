@@ -76,10 +76,10 @@ struct MainTabView: View {
     @ViewBuilder
     private var content: some View {
         switch app.selectedTab {
-        case .home:   HomeView()
-        case .fridge: FridgeView()
-        case .cook:   CookDeckView()
-        case .list:   ShoppingView()
+        case .home:     HomeView()
+        case .fridge:   FridgeView()
+        case .cook:     CookDeckView()
+        case .progress: ProgressView()
         }
     }
 }
@@ -130,8 +130,8 @@ struct BigTabBar: View {
                 .frame(maxWidth: .infinity)
                 .tapPress()
 
-                tab(.cook,  "recipe", "Cook")
-                tab(.list,  "cart",   "List")
+                tab(.cook,     "recipe", "Cook")
+                tab(.progress, "chart",  "Progress")
             }
             .frame(height: 64)
             .padding(.bottom, 6)

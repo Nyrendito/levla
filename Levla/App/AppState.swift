@@ -12,11 +12,13 @@ final class AppState {
     let shopping = ShoppingService()
     let recipes = RecipeService()
     let cooked = CookedLogService()
+    let weightLog = WeightLogService()
 
     var selectedTab: MainTab = .home
     var presentingScan: ScanKind? = nil
     var presentingProfile: Bool = false
     var presentingLogMeal: Bool = false
+    var presentingShopping: Bool = false
 
     /// True only when we have a confirmed signed-in user whose profile is
     /// known to NOT be onboarded yet. (`nil` profile is fine — we just haven't
@@ -37,22 +39,26 @@ final class AppState {
     func hydrate() async {
         await auth.bootstrap()
         if let uid = auth.currentUserId {
-            async let p: Void = profileService.reload(userId: uid)
-            async let f: Void = fridge.reload(userId: uid)
-            async let s: Void = shopping.reload(userId: uid)
-            async let c: Void = cooked.reloadToday(userId: uid)
-            _ = await (p, f, s, c)
+            async let p: Void  = profileService.reload(userId: uid)
+            async let f: Void  = fridge.reload(userId: uid)
+            async let s: Void  = shopping.reload(userId: uid)
+            async let c: Void  = cooked.reloadToday(userId: uid)
+            async let ch: Void = cooked.reloadHistory(userId: uid)
+            async let w: Void  = weightLog.reload(userId: uid)
+            _ = await (p, f, s, c, ch, w)
             await recipes.reload(for: fridge.items, profile: currentProfile)
         }
     }
 
     func refreshForUser() async {
         guard let uid = auth.currentUserId else { return }
-        async let p: Void = profileService.reload(userId: uid)
-        async let f: Void = fridge.reload(userId: uid)
-        async let s: Void = shopping.reload(userId: uid)
-        async let c: Void = cooked.reloadToday(userId: uid)
-        _ = await (p, f, s, c)
+        async let p: Void  = profileService.reload(userId: uid)
+        async let f: Void  = fridge.reload(userId: uid)
+        async let s: Void  = shopping.reload(userId: uid)
+        async let c: Void  = cooked.reloadToday(userId: uid)
+        async let ch: Void = cooked.reloadHistory(userId: uid)
+        async let w: Void  = weightLog.reload(userId: uid)
+        _ = await (p, f, s, c, ch, w)
         await recipes.reload(for: fridge.items, profile: currentProfile)
     }
 
@@ -64,5 +70,5 @@ final class AppState {
 }
 
 enum MainTab: Hashable {
-    case home, fridge, cook, list
+    case home, fridge, cook, progress
 }

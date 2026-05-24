@@ -27,13 +27,39 @@ struct FridgeView: View {
         }
     }
 
+    private var shoppingCount: Int {
+        app.shopping.items.filter { !$0.checked }.count
+            + app.fridge.items.filter { $0.status == .low }.count
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 header.padding(.horizontal, L.S.pad).padding(.top, 60)
                 searchField.padding(.horizontal, L.S.pad).padding(.top, 18)
-                BigCTA(title: "Scan fridge", icon: "camera", kind: .primary) {
-                    app.presentingScan = .fridge
+
+                HStack(spacing: 10) {
+                    BigCTA(title: "Scan fridge", icon: "camera", kind: .primary) {
+                        app.presentingScan = .fridge
+                    }
+                    Button {
+                        app.presentingShopping = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            LSymbol(key: "cart", size: 16, weight: .heavy)
+                                .foregroundStyle(L.ink)
+                            if shoppingCount > 0 {
+                                Text("\(shoppingCount)")
+                                    .font(.manrope(13, .heavy))
+                                    .foregroundStyle(L.ink)
+                            }
+                        }
+                        .frame(width: shoppingCount > 0 ? 64 : 56, height: L.btnHeight)
+                        .background(.white, in: Capsule())
+                        .overlay(Capsule().strokeBorder(L.hairline, lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .tapPress()
                 }
                 .padding(.horizontal, L.S.pad)
                 .padding(.top, 14)
@@ -49,6 +75,15 @@ struct FridgeView: View {
                 await app.fridge.reload(userId: uid)
             }
         }
+        .sheet(isPresented: bindingShopping) {
+            ShoppingView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var bindingShopping: Binding<Bool> {
+        Binding(get: { app.presentingShopping }, set: { app.presentingShopping = $0 })
     }
 
     // MARK: - Subviews
