@@ -192,62 +192,68 @@ struct RecipeDetailView: View {
         }
     }
 
-    // MARK: - Lifesum nutritional info block
+    // MARK: - Nutritional information block
 
-    private var totalEnergy: Double {
-        let c = Double(recipe.carbs) * 4
-        let f = Double(recipe.fat) * 9
-        let p = Double(recipe.protein) * 4
-        return max(1, c + f + p)
+    /// Recipe-time micronutrient estimates derived from the carb / fat /
+    /// kcal profile (the suggest-recipes schema doesn't include micros).
+    /// IOM 14 g fibre / 1000 kcal, ~10% of carbs as sugar, ~300 mg sodium
+    /// per 1000 kcal for home cooking. The logged values use analyze-meal's
+    /// real numbers when the user finishes cooking the meal.
+    private var estimatedFiber:  Int { Int((Double(recipe.kcal) * 14.0 / 1000.0).rounded()) }
+    private var estimatedSugar:  Int { max(0, Int(Double(recipe.carbs) * 0.10)) }
+    private var estimatedSodium: Int { Int((Double(recipe.kcal) * 0.3).rounded()) }
+
+    /// Percent of the user's daily goal that one serving of this recipe
+    /// covers. Used to label each row in the nutrition list. Returns nil
+    /// when the goal isn't set (e.g. no profile yet).
+    private func pctOfDaily(value: Int, goal: Int?) -> Int? {
+        guard let g = goal, g > 0 else { return nil }
+        return Int((Double(value) / Double(g) * 100).rounded())
     }
-    private var carbsPct:   Double { (Double(recipe.carbs) * 4) / totalEnergy }
-    private var fatPct:     Double { (Double(recipe.fat) * 9) / totalEnergy }
-    private var proteinPct: Double { (Double(recipe.protein) * 4) / totalEnergy }
 
     @ViewBuilder
     private var nutritionalInfoBlock: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SectionLabel(text: "Nutritional information")
+        let profile = app.currentProfile
+        // Scale values by current serving count vs the LLM's base of 2.
+        let mul = Double(servings) / 2.0
+        let kcal    = Int((Double(recipe.kcal) * mul).rounded())
+        let protein = Int((Double(recipe.protein) * mul).rounded())
+        let carbs   = Int((Double(recipe.carbs) * mul).rounded())
+        let fat     = Int((Double(recipe.fat) * mul).rounded())
+        let fiber   = Int((Double(estimatedFiber) * mul).rounded())
+        let sugar   = Int((Double(estimatedSugar) * mul).rounded())
+        let sodium  = Int((Double(estimatedSodium) * mul).rounded())
 
-            HStack(spacing: 14) {
-                LSNutritionDial(label: "Carbs",   percent: carbsPct,   color: L.macroCarbs)
-                LSNutritionDial(label: "Protein", percent: proteinPct, color: L.macroProtein)
-                LSNutritionDial(label: "Fat",     percent: fatPct,     color: L.macroFat)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel(text: "Nutritional information")
+                Spacer()
+                Text("\(servings) serving\(servings == 1 ? "" : "s")")
+                    .font(.manrope(11, .heavy))
+                    .tracking(0.4)
+                    .foregroundStyle(L.muted)
             }
-            .frame(maxWidth: .infinity)
+            Text("Numbers per serving × \(servings). \"% daily\" is how much of your personalised daily goal this meal covers.")
+                .font(.manrope(12, .semibold))
+                .foregroundStyle(L.ink.opacity(0.55))
+                .lineSpacing(2)
+                .padding(.bottom, 4)
 
-            // Hairlined macro list, Lifesum-style: label left, value right.
             VStack(spacing: 0) {
-                NutrientRow(label: "Kcal",    value: "\(recipe.kcal) kcal", isLast: false)
-                NutrientRow(label: "Protein", value: "\(recipe.protein) g", isLast: false)
-                NutrientRow(label: "Carbs",   value: "\(recipe.carbs) g",   isLast: false)
-                NutrientRow(label: "Fat",     value: "\(recipe.fat) g",     isLast: false)
-                // Micros — estimated by the same kitchen heuristics the
-                // analyze-meal model uses; surfaced so users tracking sugar/
-                // sodium see the figure before they cook.
-                NutrientRow(label: "Fiber",   value: "\(estimatedFiber) g",      isLast: false)
-                NutrientRow(label: "Sugar",   value: "\(estimatedSugar) g",      isLast: false)
-                NutrientRow(label: "Sodium",  value: "\(estimatedSodium) mg",    isLast: true)
+                NutritionRow(label: "Kcal",    value: "\(kcal) kcal",  pct: pctOfDaily(value: kcal,    goal: profile?.dailyKcalGoal),    isLast: false)
+                NutritionRow(label: "Protein", value: "\(protein) g",   pct: pctOfDaily(value: protein, goal: profile?.dailyProteinGoal), isLast: false)
+                NutritionRow(label: "Carbs",   value: "\(carbs) g",     pct: pctOfDaily(value: carbs,   goal: profile?.dailyCarbsGoal),   isLast: false)
+                NutritionRow(label: "Fat",     value: "\(fat) g",       pct: pctOfDaily(value: fat,     goal: profile?.dailyFatGoal),     isLast: false)
+                NutritionRow(label: "Fiber",   value: "\(fiber) g",     pct: pctOfDaily(value: fiber,   goal: profile?.dailyFiberGoal),   isLast: false)
+                NutritionRow(label: "Sugar",   value: "\(sugar) g",     pct: pctOfDaily(value: sugar,   goal: profile?.dailySugarGoal),   isLast: false)
+                NutritionRow(label: "Sodium",  value: "\(sodium) mg",   pct: pctOfDaily(value: sodium,  goal: profile?.dailySodiumGoal),  isLast: true)
             }
+            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(L.hairline, lineWidth: 0.5)
+            )
         }
-    }
-
-    // Rough recipe-time micronutrient estimates derived from the carb,
-    // fat and protein profile. suggest-recipes doesn't return micros yet
-    // (would push the LLM output above the strict-schema size limit),
-    // so we approximate using typical-per-100g lookups: ~14g fiber / 1000
-    // kcal (IOM), ~5g of carbs as sugar by default, sodium scales with
-    // kcal at ~300mg per 1000kcal for home cooking. Once a meal is
-    // actually logged via the cooking flow we use the recipe's own carbs
-    // (which already account for the recipe's character).
-    private var estimatedFiber: Int {
-        Int((Double(recipe.kcal) * 14.0 / 1000.0).rounded())
-    }
-    private var estimatedSugar: Int {
-        max(0, Int(Double(recipe.carbs) * 0.10))
-    }
-    private var estimatedSodium: Int {
-        Int((Double(recipe.kcal) * 0.3).rounded())
     }
 
     // MARK: - Reason / shopping / ingredient row
@@ -357,41 +363,18 @@ struct RecipeDetailView: View {
 
 // MARK: - Nutrition primitives
 
-/// Lifesum-style large ring + percent + label.
-private struct LSNutritionDial: View {
-    let label: String
-    let percent: Double
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle().stroke(L.inset, lineWidth: 4)
-                Circle()
-                    .trim(from: 0, to: CGFloat(max(0, min(1, percent))))
-                    .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Text("\(Int((percent * 100).rounded()))%")
-                    .font(.manrope(16, .heavy))
-                    .foregroundStyle(L.ink)
-            }
-            .frame(width: 72, height: 72)
-            Text(label)
-                .font(.manrope(12, .heavy))
-                .tracking(0.4)
-                .foregroundStyle(L.muted)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private struct NutrientRow: View {
+/// Hairlined row with label on the left, value in the middle, and a small
+/// "% of your daily goal" badge on the right. Replaces the older
+/// NutrientRow + the macro-share dials with one unambiguous layout.
+private struct NutritionRow: View {
     let label: String
     let value: String
+    let pct: Int?
     let isLast: Bool
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
                 Text(label)
                     .font(.manrope(15, .heavy))
                     .foregroundStyle(L.ink)
@@ -399,8 +382,17 @@ private struct NutrientRow: View {
                 Text(value)
                     .font(.manrope(15, .heavy))
                     .foregroundStyle(L.ink)
+                if let pct {
+                    Text("\(pct)% daily")
+                        .font(.manrope(11, .heavy))
+                        .tracking(0.4)
+                        .foregroundStyle(L.brand)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(L.brandBg, in: Capsule())
+                }
             }
-            .padding(.vertical, 14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             if !isLast { Hairline() }
         }
     }

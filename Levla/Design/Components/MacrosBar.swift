@@ -126,8 +126,9 @@ struct MacrosCarousel: View {
 
 // MARK: - Cal-AI calories hero (big card)
 
-/// Big top card: "1505 / Calories left" on the left, large arc ring with
-/// flame icon on the right. Mirrors the Cal AI Page 1 hero.
+/// Big top card. Mirrors the Cal AI Page 1 hero but uses an X / Y format
+/// for the headline so the goal number always fits on one line (the old
+/// "LEFT · GOAL 2333" label wrapped to three lines on smaller phones).
 private struct CaloriesHeroCard: View {
     let kcal: Int
     let goal: Int?
@@ -136,25 +137,40 @@ private struct CaloriesHeroCard: View {
         guard let g = goal, g > 0 else { return 0 }
         return max(0, min(1, Double(kcal) / Double(g)))
     }
-    private var left: Int { max(0, (goal ?? 0) - kcal) }
-    private var over: Int { max(0, kcal - (goal ?? 0)) }
     private var hasGoal: Bool { (goal ?? 0) > 0 }
+    private var over: Bool { hasGoal && kcal > (goal ?? 0) }
 
     var body: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(headline)")
-                    .font(.manrope(46, .heavy))
-                    .kerning(-1.4)
-                    .foregroundStyle(L.ink)
-                    .contentTransition(.numericText())
-                    .animation(.easeInOut(duration: 0.2), value: headline)
-                Text(headlineLabel)
-                    .font(.manrope(13.5, .heavy))
-                    .foregroundStyle(over > 0 ? L.pop : L.muted)
-                    .tracking(0.2)
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                // Headline: big "1505" then a smaller "/ 2333" trailing it
+                // on the same baseline. Auto-shrinks to fit on narrower
+                // phones via minimumScaleFactor.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(kcal)")
+                        .font(.manrope(42, .heavy))
+                        .kerning(-1.2)
+                        .foregroundStyle(over ? L.pop : L.ink)
+                        .contentTransition(.numericText())
+                        .animation(.easeInOut(duration: 0.2), value: kcal)
+                    if hasGoal, let goal {
+                        Text("/ \(goal)")
+                            .font(.manrope(18, .heavy))
+                            .kerning(-0.3)
+                            .foregroundStyle(L.muted)
+                            .baselineOffset(2)
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+
+                Text(over ? "Calories over" : (hasGoal ? "Calories eaten" : "Calories today"))
+                    .font(.manrope(12, .heavy))
+                    .tracking(0.4)
+                    .foregroundStyle(over ? L.pop : L.muted)
             }
-            Spacer()
+            Spacer(minLength: 4)
+
             ZStack {
                 Circle()
                     .stroke(L.ink.opacity(0.06), lineWidth: 10)
@@ -171,9 +187,9 @@ private struct CaloriesHeroCard: View {
                 }
                 .frame(width: 56, height: 56)
             }
-            .frame(width: 120, height: 120)
+            .frame(width: 110, height: 110)
         }
-        .padding(22)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white, in: RoundedRectangle(cornerRadius: L.R.xl, style: .continuous))
         .overlay(
@@ -182,26 +198,15 @@ private struct CaloriesHeroCard: View {
         )
         .modifier(_MacrosShadow())
     }
-
-    private var headline: Int {
-        if !hasGoal { return kcal }
-        if over > 0 { return over }
-        return left
-    }
-    private var headlineLabel: String {
-        if !hasGoal { return "Calories eaten" }
-        if over > 0 { return "Calories over" }
-        return "Calories left"
-    }
 }
 
 // MARK: - Micro card (Protein/Carbs/Fat/Fiber/Sugar/Sodium)
 
-/// Small white card: "<value>g / Label left", with a circular ring at the
-/// bottom showing progress. Mirrors Cal AI's "129g / Protein left" tile.
-/// `lessIsBetter` flips the ring fill direction (we fill MORE as you get
-/// CLOSER to the goal, but we still cap visually at 1.0; commentary in
-/// HealthScore handles over-target penalties).
+/// Small white card. Label always on its own line at the top so it can't
+/// wrap mid-word ("Protein" was breaking to "Protei" + "n" on narrow
+/// phones in the old layout). Big number underneath in X / Y format so
+/// the goal value sits inline with what's been eaten. Small progress ring
+/// at the bottom.
 private struct MicroCard: View {
     let label: String
     let value: Int
@@ -209,10 +214,9 @@ private struct MicroCard: View {
     let unit: String
     let color: Color
     let icon: String       // SF Symbol
-    let iconAsset: String  // Fallback emoji (used if SF Symbol unavailable)
+    let iconAsset: String  // Fallback emoji (kept for back-compat)
     var lessIsBetter: Bool = false
 
-    private var left: Int { max(0, (goal ?? 0) - value) }
     private var progress: Double {
         guard let g = goal, g > 0 else { return 0 }
         return max(0, min(1, Double(value) / Double(g)))
@@ -220,23 +224,34 @@ private struct MicroCard: View {
     private var hasGoal: Bool { (goal ?? 0) > 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(hasGoal ? left : value)\(unit)")
-                    .font(.manrope(22, .heavy))
-                    .kerning(-0.6)
+        VStack(alignment: .leading, spacing: 10) {
+            // Label on its own line — never wraps now.
+            Text(label.uppercased())
+                .font(.manrope(10, .heavy))
+                .tracking(0.8)
+                .foregroundStyle(L.muted)
+
+            // "60 / 120 g" — auto-shrinks on narrow phones via
+            // minimumScaleFactor so the whole pair never wraps.
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text("\(value)")
+                    .font(.manrope(20, .heavy))
+                    .kerning(-0.5)
                     .foregroundStyle(L.ink)
                     .contentTransition(.numericText())
-                    .animation(.easeInOut(duration: 0.2), value: left)
-                HStack(spacing: 4) {
-                    Text(label)
-                        .font(.manrope(12, .heavy))
-                        .foregroundStyle(L.ink)
-                    Text(hasGoal ? "left" : "today")
-                        .font(.manrope(12, .semibold))
+                    .animation(.easeInOut(duration: 0.2), value: value)
+                if hasGoal, let goal {
+                    Text("/ \(goal)\(unit)")
+                        .font(.manrope(11.5, .heavy))
+                        .foregroundStyle(L.muted)
+                } else {
+                    Text(unit)
+                        .font(.manrope(11.5, .heavy))
                         .foregroundStyle(L.muted)
                 }
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
 
             Spacer(minLength: 0)
 
@@ -248,14 +263,14 @@ private struct MicroCard: View {
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.4), value: progress)
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(color)
             }
-            .frame(width: 54, height: 54)
+            .frame(width: 48, height: 48)
             .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 156, alignment: .topLeading)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
         .background(.white, in: RoundedRectangle(cornerRadius: L.R.xl, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: L.R.xl, style: .continuous)

@@ -61,6 +61,7 @@ struct LogMealView: View {
                         image: image,
                         meal: meal,
                         saving: saving,
+                        onClose: onClose,
                         onRetake: { resetToCapture() },
                         onLog: { Task { await logMeal() } }
                     )
@@ -293,6 +294,10 @@ private struct LogMealResultStage: View {
     let image: UIImage
     let meal: AnalyzedMeal
     let saving: Bool
+    /// Bail-out — closes the LogMeal flow without writing anything.
+    /// Previously users were stuck on this screen if they didn't want to
+    /// log the analyzed meal; their only out was killing the app.
+    let onClose: () -> Void
     let onRetake: () -> Void
     let onLog: () -> Void
 
@@ -339,6 +344,28 @@ private struct LogMealResultStage: View {
 
     private var header: some View {
         HStack {
+            // X on the left — closes the whole LogMeal flow without
+            // writing anything to cooked_entries. Without this the user
+            // had no way to bail out once analysis finished.
+            Button(action: onClose) {
+                ZStack {
+                    Circle().fill(.white)
+                    LSymbol(key: "close", size: 13, weight: .heavy).foregroundStyle(L.ink)
+                }
+                .frame(width: 38, height: 38)
+                .modifier(_LMSoft())
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+            Text("Your meal")
+                .font(.manrope(15, .heavy))
+                .tracking(-0.2)
+                .foregroundStyle(L.ink)
+            Spacer()
+
+            // Camera (retake) on the right — re-runs the scan with a
+            // fresh photo.
             Button(action: onRetake) {
                 ZStack {
                     Circle().fill(.white)
@@ -348,13 +375,6 @@ private struct LogMealResultStage: View {
                 .modifier(_LMSoft())
             }
             .buttonStyle(.plain)
-            Spacer()
-            Text("Your meal")
-                .font(.manrope(15, .heavy))
-                .tracking(-0.2)
-                .foregroundStyle(L.ink)
-            Spacer()
-            Spacer().frame(width: 38, height: 38)
         }
         .padding(.horizontal, L.S.pad)
     }
