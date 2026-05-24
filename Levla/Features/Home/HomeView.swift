@@ -29,6 +29,14 @@ struct HomeView: View {
 
     private var urgentCount: Int { useFirst.count }
 
+    private var recentlyAdded: [FoodItem] {
+        Array(
+            app.fridge.items
+                .sorted { $0.addedAt > $1.addedAt }
+                .prefix(3)
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -41,6 +49,10 @@ struct HomeView: View {
                 }
                 if !useFirst.isEmpty {
                     useFirstSection
+                        .padding(.top, 28)
+                }
+                if !recentlyAdded.isEmpty {
+                    recentlyAddedSection
                         .padding(.top, 28)
                 }
                 BigCTA(title: "Scan fridge", icon: "camera", kind: .primary) {
@@ -151,6 +163,35 @@ struct HomeView: View {
         }
     }
 
+    // MARK: - Recently added
+
+    private var recentlyAddedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("RECENTLY ADDED")
+                    .font(.mono(11)).tracking(1.2)
+                    .foregroundStyle(L.ink.opacity(0.4))
+                Spacer()
+                Button { app.selectedTab = .fridge } label: {
+                    Text("See all")
+                        .font(.manrope(12, .heavy))
+                        .foregroundStyle(L.ink.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, L.S.pad)
+
+            VStack(spacing: 0) {
+                ForEach(Array(recentlyAdded.enumerated()), id: \.element.id) { (i, item) in
+                    RecentRow(item: item, isLast: i == recentlyAdded.count - 1)
+                }
+            }
+            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .modifier(_HomeCardShadow())
+            .padding(.horizontal, L.S.pad)
+        }
+    }
+
     // MARK: - Expiring banner
 
     private var expiringBanner: some View {
@@ -252,6 +293,59 @@ private struct UseFirstChip: View {
         .padding(.horizontal, 10).padding(.vertical, 8)
         .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .modifier(_HomeChipShadow())
+    }
+}
+
+private struct RecentRow: View {
+    let item: FoodItem
+    let isLast: Bool
+
+    private var whenLabel: String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: item.addedAt, relativeTo: Date())
+    }
+
+    private var expLabel: String {
+        if item.daysLeft <= 0 { return "today" }
+        if item.daysLeft == 1 { return "tomorrow" }
+        return "\(item.daysLeft)d fresh"
+    }
+    private var expColor: Color {
+        if item.daysLeft <= 0 { return L.rose }
+        if item.daysLeft <= 3 { return L.pop }
+        return L.ink.opacity(0.5)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            FoodTile(food: item.foodKey, size: 40, radius: 12)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.manrope(15, .heavy))
+                    .kerning(-0.2)
+                    .foregroundStyle(L.ink)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(item.qty)
+                    Text("·").foregroundStyle(L.ink.opacity(0.25))
+                    Text(whenLabel)
+                }
+                .font(.manrope(12, .semibold))
+                .foregroundStyle(L.ink.opacity(0.55))
+            }
+            Spacer()
+            Text(expLabel)
+                .font(.manrope(12, .heavy))
+                .foregroundStyle(expColor)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle().fill(L.ink.opacity(0.07)).frame(height: 0.5).padding(.leading, 68)
+            }
+        }
     }
 }
 
