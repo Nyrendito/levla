@@ -116,15 +116,23 @@ struct HomeView: View {
     // MARK: - Brand
 
     private var brandRow: some View {
-        HStack {
-            Text("Levla")
-                .font(.manrope(26, .heavy))
-                .kerning(-0.8)
-                .foregroundStyle(L.ink)
+        HStack(alignment: .center) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text("Levla")
+                    .font(.manrope(24, .heavy))
+                    .kerning(-0.4)
+                    .foregroundStyle(L.brand)
+                Text("®")
+                    .font(.manrope(10, .semibold))
+                    .foregroundStyle(L.brand)
+                    .baselineOffset(8)
+            }
             Spacer()
+            BigIconBtn(icon: "user") {}
+                .opacity(0.95)
         }
         .padding(.horizontal, L.S.pad)
-        .padding(.top, 56)
+        .padding(.top, 18)
     }
 
     // MARK: - Recently added
@@ -132,14 +140,13 @@ struct HomeView: View {
     private var recentlyAddedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("RECENTLY ADDED")
-                    .font(.mono(11)).tracking(1.2)
-                    .foregroundStyle(L.ink.opacity(0.4))
+                SectionLabel(text: "Recently added")
                 Spacer()
                 Button { app.selectedTab = .fridge } label: {
-                    Text("See all")
-                        .font(.manrope(12, .heavy))
-                        .foregroundStyle(L.ink.opacity(0.5))
+                    Text("SEE ALL")
+                        .font(.manrope(11, .heavy))
+                        .tracking(1.4)
+                        .foregroundStyle(L.brand)
                 }
                 .buttonStyle(.plain)
             }
@@ -150,16 +157,18 @@ struct HomeView: View {
                     RecentRow(item: item, isLast: i == recentlyAdded.count - 1)
                 }
             }
-            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .modifier(_HomeCardShadow())
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: L.R.xl, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: L.R.xl, style: .continuous)
+                    .strokeBorder(L.hairline, lineWidth: 0.5)
+            )
             .padding(.horizontal, L.S.pad)
         }
     }
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.mono(11)).tracking(1.2)
-            .foregroundStyle(L.ink.opacity(0.4))
+        SectionLabel(text: text)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -198,70 +207,103 @@ private struct MealCarousel: View {
 
 // MARK: - Featured recipe card
 
-/// All the details live ON the card — title, time, kcal, and what's missing.
-/// The headline above is just "COOK TONIGHT".
+/// Lifesum-style recipe card — square hero image dominant, title and
+/// kcal below, heart toggle bottom-right. Clean white card, no heavy
+/// shadows, hairline border for definition.
 private struct FeaturedRecipeCard: View {
     let match: RecipeMatch
     let onTap: () -> Void
 
-    private var recipe: Recipe { match.recipe }
+    @State private var favourited = false
 
+    private var recipe: Recipe { match.recipe }
     private var missing: Int { match.missingIngredients.count }
 
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 0) {
-                FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: 200, radius: 0, label: recipe.uses.first)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous).offset(y: 1))
+                // Hero. Square aspect, food orb or future generated image.
+                FoodOrb(
+                    foods: recipe.uses,
+                    color: recipe.color,
+                    accent: recipe.accent,
+                    height: 210,
+                    radius: 0
+                )
+                .overlay(alignment: .topTrailing) {
+                    if missing == 0 {
+                        Text("ALL IN FRIDGE")
+                            .font(.manrope(10, .heavy))
+                            .tracking(1.2)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(L.brand, in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(12)
+                    } else {
+                        Text("\(missing) TO BUY")
+                            .font(.manrope(10, .heavy))
+                            .tracking(1.2)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(L.pop, in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(12)
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text(recipe.title)
-                        .font(.manrope(22, .heavy))
-                        .kerning(-0.5)
+                        .font(.manrope(20, .heavy))
+                        .kerning(-0.4)
                         .foregroundStyle(L.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
 
-                    HStack(spacing: 12) {
-                        metaPill(icon: "clock", text: "\(recipe.timeMinutes) min")
-                        metaPill(icon: "flame", text: "\(recipe.kcal) kcal")
-                        if missing == 0 {
-                            metaPill(icon: "check", text: "All in fridge", tone: .mint)
-                        } else {
-                            metaPill(icon: "cart", text: "\(missing) to buy", tone: .pop)
+                    HStack(alignment: .center) {
+                        HStack(spacing: 14) {
+                            Text("\(recipe.kcal) KCAL")
+                                .font(.manrope(11.5, .heavy))
+                                .tracking(1.4)
+                                .foregroundStyle(L.muted)
+                            Text("·").foregroundStyle(L.muted.opacity(0.5))
+                            Text("\(recipe.timeMinutes) MIN")
+                                .font(.manrope(11.5, .heavy))
+                                .tracking(1.4)
+                                .foregroundStyle(L.muted)
                         }
+                        Spacer()
+                        HeartToggle(isOn: $favourited)
                     }
                 }
-                .padding(18)
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: L.R.xl, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: L.R.xl, style: .continuous)
+                    .strokeBorder(L.hairline, lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
         .modifier(_HomeCardShadow())
         .tapPress()
     }
+}
 
-    private enum Tone { case neutral, mint, pop }
+/// Heart icon toggle. Outline when off, coral filled when on.
+struct HeartToggle: View {
+    @Binding var isOn: Bool
 
-    @ViewBuilder
-    private func metaPill(icon: String, text: String, tone: Tone = .neutral) -> some View {
-        let (fg, bg): (Color, Color) = {
-            switch tone {
-            case .neutral: return (L.ink.opacity(0.6), L.ink.opacity(0.04))
-            case .mint:    return (L.mint, L.mintBg)
-            case .pop:     return (L.pop, L.popBg)
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            ZStack {
+                Image(systemName: isOn ? "heart.fill" : "heart")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isOn ? L.heart : L.muted)
             }
-        }()
-        HStack(spacing: 5) {
-            LSymbol(key: icon, size: 12, weight: .heavy)
-            Text(text)
+            .frame(width: 28, height: 28)
         }
-        .font(.manrope(12.5, .heavy))
-        .kerning(-0.1)
-        .foregroundStyle(fg)
-        .padding(.horizontal, 9).padding(.vertical, 6)
-        .background(bg, in: Capsule())
+        .buttonStyle(.plain)
     }
 }
 
@@ -278,36 +320,38 @@ private struct RecentRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            FoodTile(food: item.foodKey, size: 40, radius: 12)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .font(.manrope(15, .heavy))
-                    .kerning(-0.2)
-                    .foregroundStyle(L.ink)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(item.qty)
-                    Text("·").foregroundStyle(L.ink.opacity(0.25))
-                    Text(whenLabel)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                FoodTile(food: item.foodKey, size: 40, radius: 10)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.manrope(15, .heavy))
+                        .kerning(-0.2)
+                        .foregroundStyle(L.ink)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(item.qty)
+                        Text("·").foregroundStyle(L.muted.opacity(0.4))
+                        Text(whenLabel)
+                    }
+                    .font(.manrope(12, .semibold))
+                    .foregroundStyle(L.muted)
                 }
-                .font(.manrope(12, .semibold))
-                .foregroundStyle(L.ink.opacity(0.55))
+                Spacer()
+                if item.status == .low {
+                    Text("LOW")
+                        .font(.manrope(10, .heavy))
+                        .tracking(1.2)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(L.sunBg, in: Capsule())
+                        .foregroundStyle(L.sunFg)
+                }
             }
-            Spacer()
-            if item.status == .low {
-                Text("low")
-                    .font(.manrope(11, .heavy))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(L.sun, in: Capsule())
-                    .foregroundStyle(L.cream)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .overlay(alignment: .bottom) {
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
             if !isLast {
-                Rectangle().fill(L.ink.opacity(0.07)).frame(height: 0.5).padding(.leading, 68)
+                Hairline(inset: 70)
             }
         }
     }

@@ -6,18 +6,17 @@ struct MainTabView: View {
     @State private var presentedScan: ScanKind? = nil
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            L.paper.ignoresSafeArea()
-
-            content
-
+        VStack(spacing: 0) {
+            ZStack {
+                L.paper.ignoresSafeArea()
+                content
+            }
             BigTabBar(
                 selected: bindingTab,
                 onScan: { scanSheetOpen = true }
             )
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
         }
+        .background(L.paper)
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: $scanSheetOpen) {
             ScanSheetView(
@@ -58,67 +57,55 @@ extension ScanKind: Identifiable {
     public var id: String { rawValue }
 }
 
-/// Floating bottom tab bar — 4 tabs split around a center Scan FAB.
+/// Lifesum-style bottom bar: subtle gray icons, green active, center
+/// green disc with white plus. Sits as an opaque white surface with a
+/// hairline above it (flat, not a floating pill).
 struct BigTabBar: View {
     @Binding var selected: MainTab
     let onScan: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
-            tab(.home, "home", "Home", L.pop)
-            tab(.fridge, "fridge", "Fridge", L.mint)
+        VStack(spacing: 0) {
+            Hairline()
+            HStack(spacing: 0) {
+                tab(.home,   "home",   "Home")
+                tab(.fridge, "fridge", "Fridge")
 
-            // Center Scan FAB
-            Button(action: onScan) {
-                ZStack {
-                    Circle()
-                        .fill(L.pop)
-                        .frame(width: 56, height: 56)
-                        .overlay(
-                            Circle().stroke(Color.white.opacity(0.22), lineWidth: 1)
-                        )
-                    LSymbol(key: "scan", size: 26, weight: .bold).foregroundStyle(L.cream)
+                // Center Scan FAB — green disc with white plus / scan.
+                Button(action: onScan) {
+                    ZStack {
+                        Circle()
+                            .fill(L.brand)
+                            .frame(width: 56, height: 56)
+                        LSymbol(key: "scan", size: 24, weight: .heavy).foregroundStyle(.white)
+                    }
+                    .shadow(color: L.brand.opacity(0.36), radius: 10, x: 0, y: 4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .shadow(color: L.pop.opacity(0.4), radius: 12, x: 0, y: 6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity)
-            .tapPress()
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .tapPress()
 
-            tab(.cook, "recipe", "Cook", L.sun)
-            tab(.list, "cart", "List", L.mint)
+                tab(.cook,  "recipe", "Cook")
+                tab(.list,  "cart",   "List")
+            }
+            .frame(height: 64)
+            .padding(.bottom, 6)
         }
-        .frame(height: 76)
-        .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(L.cream.opacity(0.94))
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(Color(hex: 0x282016).opacity(0.08), lineWidth: 0.5)
-        )
-        .shadow(color: Color(hex: 0x282016).opacity(0.14), radius: 16, x: 0, y: 8)
+        .background(Color.white.ignoresSafeArea(edges: .bottom))
     }
 
-    private func tab(_ t: MainTab, _ icon: String, _ label: String, _ color: Color) -> some View {
+    private func tab(_ t: MainTab, _ icon: String, _ label: String) -> some View {
         let active = selected == t
         return Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { selected = t }
+            withAnimation(.easeInOut(duration: 0.18)) { selected = t }
         } label: {
             VStack(spacing: 4) {
-                ZStack {
-                    Capsule()
-                        .fill(active ? color : .clear)
-                        .frame(width: active ? 48 : 40, height: active ? 36 : 30)
-                    LSymbol(key: icon, size: active ? 22 : 22, weight: .semibold)
-                        .foregroundStyle(active ? L.cream : L.ink)
-                }
+                LSymbol(key: icon, size: 22, weight: active ? .bold : .regular)
+                    .foregroundStyle(active ? L.brand : L.muted)
                 Text(label)
-                    .font(.manrope(11.5, active ? .heavy : .semibold))
-                    .foregroundStyle(active ? L.ink : L.ink.opacity(0.5))
+                    .font(.manrope(10.5, active ? .heavy : .semibold))
+                    .foregroundStyle(active ? L.brand : L.muted)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

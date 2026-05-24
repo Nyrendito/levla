@@ -1,38 +1,63 @@
 import SwiftUI
 
-/// Levla design tokens — warm cream paper, ink, sage mint, clay coral.
-/// Mirrors the design's V2 token set (Manrope, rCard 28, rBtn 22, btnH 62).
+/// Levla design tokens — refreshed Lifesum-inspired palette.
+/// Sage green primary, near-white card surfaces over a soft cream background,
+/// generous spacing, hairline dividers. Manrope throughout.
 enum L {
     // MARK: - Type
     static let manrope = "Manrope"
     static let mono = "JetBrainsMono-Medium"
 
-    // MARK: - Surfaces (low-chroma warm whites)
-    static let paper = Color(hex: 0xF6F1E6)        // app background
-    static let cream = Color(hex: 0xFFF8EC)        // warmer surface
-    static let surface = Color(hex: 0xFAF7F1)      // primary surface
-    static let card = Color.white                  // raised card
-    static let inset = Color(hex: 0xEFEAE0)        // tag chip background
-    static let hairline = Color(hex: 0x282016).opacity(0.07)
-    static let hairline2 = Color(hex: 0x282016).opacity(0.12)
+    // MARK: - Surfaces (Lifesum: warm cream BG, pure white cards)
+    static let paper    = Color(hex: 0xF4F1ED)     // app background, slightly lighter cream
+    static let cream    = Color(hex: 0xFFFDF7)     // hero surfaces / dark-mode cream
+    static let surface  = Color(hex: 0xFBF9F4)     // secondary surface
+    static let card     = Color.white              // raised card surface
+    static let inset    = Color(hex: 0xF0EDE6)     // tag chips, hairline backgrounds
+    static let hairline = Color(hex: 0x1F1D1A).opacity(0.06)
+    static let hairline2 = Color(hex: 0x1F1D1A).opacity(0.10)
 
     // MARK: - Ink
-    static let ink = Color(hex: 0x1F1D1A)
-    static let ink2 = Color(hex: 0x3A3530)
-    static let muted = Color(hex: 0x7A7268)
-    static let muted2 = Color(hex: 0x9A9088)
+    static let ink   = Color(hex: 0x18181A)        // primary text
+    static let ink2  = Color(hex: 0x3A3530)
+    static let muted = Color(hex: 0x7E7872)
+    static let muted2 = Color(hex: 0xA09A93)
 
-    // MARK: - Accents (V2 "viral" palette)
-    static let pop = Color(hex: 0xE97A47)          // clay coral — primary accent
+    // MARK: - Brand & accents
+    /// PRIMARY brand green (Lifesum-like sage). Used for primary CTAs,
+    /// active tab indicator, brand wordmark accent.
+    static let brand     = Color(hex: 0x5DBC83)
+    static let brandDark = Color(hex: 0x2E7A4E)
+    static let brandBg   = Color(hex: 0xDDF0E4)
+
+    /// Legacy aliases — kept so existing call sites compile; they map to the
+    /// refreshed palette.
+    static let mint    = brand
+    static let mintBg  = brandBg
+
+    /// Coral / orange — Levla's secondary brand color. Used for the center
+    /// Scan FAB and emphasis tags.
+    static let pop     = Color(hex: 0xEA7649)
     static let popDark = Color(hex: 0x7C3A18)
-    static let popBg = Color(hex: 0xFFE9D7)
-    static let mint = Color(hex: 0x7BAE61)         // sage green — fresh
-    static let mintBg = Color(hex: 0xDCEDC8)
-    static let sun = Color(hex: 0xF2C24A)          // honey — low stock
-    static let sunBg = Color(hex: 0xFFF1C7)
-    static let sunFg = Color(hex: 0xB58418)
-    static let rose = Color(hex: 0xD54E55)         // alarm red — use today
-    static let roseBg = Color(hex: 0xFCDDD8)
+    static let popBg   = Color(hex: 0xFCE3D5)
+
+    /// Heart / favourite color, matches Lifesum.
+    static let heart   = Color(hex: 0xF4665C)
+    static let heartBg = Color(hex: 0xFDE2DF)
+
+    /// Honey for "low stock" tag.
+    static let sun     = Color(hex: 0xE4B33A)
+    static let sunBg   = Color(hex: 0xFFF1C7)
+    static let sunFg   = Color(hex: 0xA07215)
+
+    /// Alarm red (kept for future use; currently we don't surface it).
+    static let rose    = Color(hex: 0xD54E55)
+    static let roseBg  = Color(hex: 0xFCDDD8)
+
+    // MARK: - Macro accent palette (Cal AI / Lifesum convention)
+    static let macroCarbs   = Color(hex: 0xE4B33A)   // yellow
+    static let macroFat     = Color(hex: 0x6A8DDA)   // soft blue
+    static let macroProtein = Color(hex: 0x5DBC83)   // green
 
     // Food-tile pastel backgrounds
     static let pTomato = Color(hex: 0xF4DCC8)
@@ -40,50 +65,75 @@ enum L {
     static let pCream = Color(hex: 0xF1ECDE)
     static let pSage = Color(hex: 0xDCEDC8)
 
-    // MARK: - Radii
+    // MARK: - Radii (Lifesum favours softer corners)
     enum R {
         static let xs: CGFloat = 6
         static let sm: CGFloat = 10
-        static let md: CGFloat = 14
-        static let lg: CGFloat = 20
-        static let xl: CGFloat = 22       // V2 button radius
-        static let xxl: CGFloat = 28      // V2 card radius
+        static let md: CGFloat = 12
+        static let lg: CGFloat = 16
+        static let xl: CGFloat = 20       // primary card radius
+        static let xxl: CGFloat = 28      // hero radius
         static let pill: CGFloat = 999
     }
 
-    // MARK: - Spacing
+    // MARK: - Spacing — generous, Lifesum-style breathing room
     enum S {
         static let pad: CGFloat = 22
-        static let gap: CGFloat = 12
+        static let gap: CGFloat = 14
         static let gapSm: CGFloat = 8
-        static let gapLg: CGFloat = 18
+        static let gapLg: CGFloat = 22
+        /// Vertical rhythm between sections on the same screen.
+        static let section: CGFloat = 32
     }
 
-    // MARK: - Buttons
-    static let btnHeight: CGFloat = 62
+    // MARK: - Buttons (Lifesum pill heights)
+    static let btnHeight: CGFloat = 56
 
-    // MARK: - Shadows
+    // MARK: - Shadows — flatter than before; Lifesum cards are nearly flat
     enum Shadow {
         static func card<V: View>(_ v: V) -> some View {
-            v.shadow(color: Color(hex: 0x282016).opacity(0.06), radius: 6, x: 0, y: 2)
-             .shadow(color: Color(hex: 0x282016).opacity(0.08), radius: 18, x: 0, y: 8)
+            v.shadow(color: Color(hex: 0x1F1D1A).opacity(0.04), radius: 6, x: 0, y: 2)
+             .shadow(color: Color(hex: 0x1F1D1A).opacity(0.04), radius: 14, x: 0, y: 6)
         }
         static func lift<V: View>(_ v: V) -> some View {
-            v.shadow(color: Color(hex: 0x282016).opacity(0.05), radius: 4, x: 0, y: 2)
-             .shadow(color: Color(hex: 0x282016).opacity(0.10), radius: 20, x: 0, y: 10)
+            v.shadow(color: Color(hex: 0x1F1D1A).opacity(0.05), radius: 6, x: 0, y: 4)
+             .shadow(color: Color(hex: 0x1F1D1A).opacity(0.07), radius: 18, x: 0, y: 10)
         }
         static func soft<V: View>(_ v: V) -> some View {
-            v.shadow(color: Color(hex: 0x282016).opacity(0.05), radius: 14, x: 0, y: 4)
+            v.shadow(color: Color(hex: 0x1F1D1A).opacity(0.04), radius: 10, x: 0, y: 4)
         }
         static func button<V: View>(_ v: V) -> some View {
-            v.shadow(color: Color(hex: 0x1F1D1A).opacity(0.28), radius: 12, x: 0, y: 8)
+            v.shadow(color: L.brand.opacity(0.28), radius: 12, x: 0, y: 6)
         }
         static func pop<V: View>(_ v: V) -> some View {
-            v.shadow(color: L.pop.opacity(0.35), radius: 15, x: 0, y: 10)
+            v.shadow(color: L.pop.opacity(0.30), radius: 14, x: 0, y: 8)
         }
         static func mint<V: View>(_ v: V) -> some View {
-            v.shadow(color: L.mint.opacity(0.32), radius: 14, x: 0, y: 8)
+            v.shadow(color: L.brand.opacity(0.28), radius: 12, x: 0, y: 6)
         }
+    }
+}
+
+// MARK: - Lifesum-style section header (small uppercase tracked)
+
+struct SectionLabel: View {
+    let text: String
+    var body: some View {
+        Text(text.uppercased())
+            .font(.manrope(11, .heavy))
+            .tracking(1.6)
+            .foregroundStyle(L.ink.opacity(0.55))
+    }
+}
+
+/// Hairline divider — used between list rows. Lifesum's signature.
+struct Hairline: View {
+    var inset: CGFloat = 0
+    var body: some View {
+        Rectangle()
+            .fill(L.hairline)
+            .frame(height: 0.5)
+            .padding(.leading, inset)
     }
 }
 

@@ -54,16 +54,20 @@ struct FridgeView: View {
     // MARK: - Subviews
 
     private var header: some View {
-        HStack(alignment: .lastTextBaseline) {
-            Text("My fridge")
-                .font(.manrope(34, .heavy))
-                .kerning(-1.1)
-                .foregroundStyle(L.ink)
-            Spacer()
-            if app.fridge.total > 0 {
-                Text("\(app.fridge.total)")
-                    .font(.manrope(15, .heavy))
-                    .foregroundStyle(L.ink.opacity(0.4))
+        VStack(alignment: .leading, spacing: 6) {
+            SectionLabel(text: "Your inventory")
+            HStack(alignment: .lastTextBaseline) {
+                Text("My fridge")
+                    .font(.manrope(28, .heavy))
+                    .kerning(-0.7)
+                    .foregroundStyle(L.ink)
+                Spacer()
+                if app.fridge.total > 0 {
+                    Text("\(app.fridge.total) items")
+                        .font(.manrope(13, .heavy))
+                        .tracking(0.4)
+                        .foregroundStyle(L.muted)
+                }
             }
         }
     }
@@ -92,15 +96,14 @@ struct FridgeView: View {
 
     @ViewBuilder
     private var allItemsSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack {
-                Text("ALL ITEMS")
-                    .font(.mono(11)).tracking(1.2)
-                    .foregroundStyle(L.ink.opacity(0.4))
+                SectionLabel(text: "All items")
                 Spacer()
                 Text("\(allFiltered.count)")
-                    .font(.manrope(12, .heavy))
-                    .foregroundStyle(L.ink.opacity(0.4))
+                    .font(.manrope(11, .heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(L.muted)
             }
             .padding(.horizontal, L.S.pad)
 
@@ -110,8 +113,8 @@ struct FridgeView: View {
                 ForEach(groupedByCategory, id: \.0) { (cat, items) in
                     VStack(alignment: .leading, spacing: 10) {
                         Text(cat.rawValue)
-                            .font(.manrope(18, .heavy))
-                            .kerning(-0.4)
+                            .font(.manrope(16, .heavy))
+                            .kerning(-0.3)
                             .foregroundStyle(L.ink)
                             .padding(.horizontal, L.S.pad)
                         VStack(spacing: 8) {

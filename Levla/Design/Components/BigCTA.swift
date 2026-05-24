@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// 62pt-tall confident button — the "you can't miss it" CTA.
+/// Lifesum-style primary action button: pill, uppercase, soft green by
+/// default. `.pop` = coral, `.ink` = dark, `.light` = white.
 struct BigCTA: View {
-    enum Kind { case primary, pop, mint, light, sun }
+    enum Kind { case primary, pop, ink, light, sun }
     enum Size { case sm, md, lg }
 
     let title: String
@@ -13,31 +14,32 @@ struct BigCTA: View {
     var action: () -> Void = {}
 
     private var bg: Color {
-        switch kind { case .primary: return L.ink; case .pop: return L.pop; case .mint: return L.mint; case .light: return .white; case .sun: return L.sun }
+        switch kind {
+        case .primary: return L.brand
+        case .pop:     return L.pop
+        case .ink:     return L.ink
+        case .light:   return .white
+        case .sun:     return L.sun
+        }
     }
     private var fg: Color {
-        switch kind { case .light: return L.ink; default: return L.cream }
+        switch kind { case .light: return L.ink; default: return .white }
     }
     private var h: CGFloat {
-        switch size { case .sm: return 48; case .md: return 56; case .lg: return L.btnHeight }
+        switch size { case .sm: return 44; case .md: return 50; case .lg: return L.btnHeight }
     }
-    private var fontSize: CGFloat { size == .sm ? 15 : 17 }
+    private var fontSize: CGFloat { size == .sm ? 13 : 14 }
 
     var body: some View {
         Button(action: action) {
             ZStack {
-                RoundedRectangle(cornerRadius: L.R.xl, style: .continuous).fill(bg)
+                Capsule().fill(bg)
                 HStack(spacing: 10) {
-                    if let icon { LSymbol(key: icon, size: 20, weight: .semibold) }
-                    Text(title)
+                    if let icon { LSymbol(key: icon, size: 18, weight: .semibold) }
+                    Text(title.uppercased())
                         .font(.manrope(fontSize, .heavy))
-                        .kerning(-0.3)
-                    if !subtle, kind == .primary {
-                        Spacer()
-                        LSymbol(key: "arrowR", size: 18, weight: .semibold)
-                    }
+                        .tracking(1.4)
                 }
-                .padding(.horizontal, kind == .primary && !subtle ? 22 : 0)
                 .foregroundStyle(fg)
             }
             .frame(maxWidth: .infinity)
@@ -53,28 +55,28 @@ private struct _BigCTAShadow: ViewModifier {
     let kind: BigCTA.Kind
     func body(content: Content) -> some View {
         switch kind {
-        case .primary: L.Shadow.button(content)
+        case .primary: L.Shadow.mint(content)
         case .pop:     L.Shadow.pop(content)
-        case .mint:    L.Shadow.mint(content)
+        case .ink:     L.Shadow.button(content)
         case .light:   L.Shadow.soft(content)
         case .sun:     L.Shadow.soft(content)
         }
     }
 }
 
-/// Round 48pt icon button used in headers.
+/// Round 44pt icon button — used in headers.
 struct BigIconBtn: View {
-    enum Tone { case light, ink, pop }
+    enum Tone { case light, ink, pop, brand }
     let icon: String
     var tone: Tone = .light
-    var size: CGFloat = 48
+    var size: CGFloat = 44
     var action: () -> Void = {}
 
     var body: some View {
         Button(action: action) {
             ZStack {
                 Circle().fill(toneBg)
-                LSymbol(key: icon, size: 20, weight: .semibold).foregroundStyle(toneFg)
+                LSymbol(key: icon, size: 18, weight: .semibold).foregroundStyle(toneFg)
             }
             .frame(width: size, height: size)
         }
@@ -83,8 +85,12 @@ struct BigIconBtn: View {
         .tapPress()
     }
 
-    private var toneBg: Color { switch tone { case .light: return .white; case .ink: return L.ink; case .pop: return L.pop } }
-    private var toneFg: Color { switch tone { case .light: return L.ink; default: return L.cream } }
+    private var toneBg: Color {
+        switch tone { case .light: return .white; case .ink: return L.ink; case .pop: return L.pop; case .brand: return L.brand }
+    }
+    private var toneFg: Color {
+        switch tone { case .light: return L.ink; default: return .white }
+    }
 }
 
 private struct _BigIconShadow: ViewModifier {

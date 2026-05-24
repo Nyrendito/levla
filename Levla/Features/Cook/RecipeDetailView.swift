@@ -50,30 +50,14 @@ struct RecipeDetailView: View {
                         .foregroundStyle(L.ink.opacity(0.55))
                         .padding(.top, 4)
 
-                    // Reason badge — quietly AI, swaps to a "live" reason
-                    // based on the user's actual fridge if one applies.
-                    HStack(spacing: 12) {
-                        AIDot(color: L.pop, size: 8)
-                        Text(liveReason)
-                            .font(.manrope(13.5, .bold))
-                            .kerning(-0.1)
-                            .foregroundStyle(L.popDark)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 14)
-                    .background(L.popBg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .padding(.top, 16)
+                    // Reason note (Lifesum-style quiet body copy).
+                    Text(liveReason)
+                        .font(.manrope(14, .semibold))
+                        .foregroundStyle(L.muted)
+                        .padding(.top, 14)
 
-                    // Stats row
-                    HStack(spacing: 0) {
-                        BigStat(big: "\(recipe.timeMinutes)", sm: "min", label: "Cook", divider: false)
-                        BigStat(big: "\(recipe.kcal)", sm: "kcal", label: "Energy", divider: true)
-                        BigStat(big: "\(recipe.protein)", sm: "g", label: "Protein", divider: true)
-                        BigStat(big: recipe.difficulty, sm: "", label: "Level", divider: true)
-                    }
-                    .padding(.vertical, 16)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .modifier(_DetailCardShadow())
-                    .padding(.top, 16)
+                    nutritionalInfoBlock
+                        .padding(.top, 24)
 
                     // Ingredients — live state from the user's fridge.
                     let liveIngredients = match.ingredients
@@ -194,6 +178,42 @@ struct RecipeDetailView: View {
         Task { await app.cooked.log(recipe: recipe, servings: servings, userId: uid) }
     }
 
+    // MARK: - Lifesum nutritional info block
+
+    private var totalEnergy: Double {
+        let c = Double(recipe.carbs) * 4
+        let f = Double(recipe.fat) * 9
+        let p = Double(recipe.protein) * 4
+        return max(1, c + f + p)
+    }
+    private var carbsPct:   Double { (Double(recipe.carbs) * 4) / totalEnergy }
+    private var fatPct:     Double { (Double(recipe.fat) * 9) / totalEnergy }
+    private var proteinPct: Double { (Double(recipe.protein) * 4) / totalEnergy }
+
+    @ViewBuilder
+    private var nutritionalInfoBlock: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SectionLabel(text: "Nutritional information")
+
+            HStack(spacing: 14) {
+                LSNutritionDial(label: "Carbs",   percent: carbsPct,   color: L.macroCarbs)
+                LSNutritionDial(label: "Protein", percent: proteinPct, color: L.macroProtein)
+                LSNutritionDial(label: "Fat",     percent: fatPct,     color: L.macroFat)
+            }
+            .frame(maxWidth: .infinity)
+
+            // Hairlined macro list, Lifesum-style: label left, value right.
+            VStack(spacing: 0) {
+                NutrientRow(label: "Kcal",    value: "\(recipe.kcal) kcal", isLast: false)
+                NutrientRow(label: "Protein", value: "\(recipe.protein) g", isLast: false)
+                NutrientRow(label: "Carbs",   value: "\(recipe.carbs) g",   isLast: false)
+                NutrientRow(label: "Fat",     value: "\(recipe.fat) g",     isLast: true)
+            }
+        }
+    }
+
+    // MARK: - Reason / shopping / ingredient row
+
     private var liveReason: String {
         if match.matchPct == 100 {
             return "You have every ingredient — start now."
@@ -247,41 +267,100 @@ struct RecipeDetailView: View {
     }
 
     @ViewBuilder
-    private func ingredientRow(_ ing: RecipeIngredient, isLast: Bool) -> some View {
+    fileprivate func ingredientRow(_ ing: RecipeIngredient, isLast: Bool) -> some View {
         HStack(spacing: 14) {
-            FoodTile(food: ing.foodKey, size: 44, radius: 14)
+            FoodTile(food: ing.foodKey, size: 40, radius: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(ing.name)
-                    .font(.manrope(15, .bold))
-                    .kerning(-0.3)
-                    .foregroundStyle(ing.have ? L.ink : L.ink.opacity(0.5))
+                    .font(.manrope(15, .heavy))
+                    .kerning(-0.2)
+                    .foregroundStyle(ing.have ? L.ink : L.muted)
                 Text(ing.amount)
-                    .font(.manrope(12.5, .semibold))
-                    .foregroundStyle(L.ink.opacity(0.5))
+                    .font(.manrope(12, .semibold))
+                    .foregroundStyle(L.muted)
             }
             Spacer()
             if ing.have {
                 if ing.low {
-                    LPill(tone: .sun) { Text("low") }
+                    Text("LOW")
+                        .font(.manrope(10, .heavy)).tracking(1.2)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(L.sunBg, in: Capsule())
+                        .foregroundStyle(L.sunFg)
                 } else {
                     ZStack {
-                        Circle().fill(L.mintBg)
-                        LSymbol(key: "check", size: 16, weight: .heavy).foregroundStyle(L.mint)
+                        Circle().fill(L.brandBg)
+                        LSymbol(key: "check", size: 14, weight: .heavy).foregroundStyle(L.brand)
                     }
-                    .frame(width: 28, height: 28)
+                    .frame(width: 26, height: 26)
                 }
             } else {
-                LPill(tone: .ink) {
-                    LSymbol(key: "cart", size: 12, weight: .heavy)
-                    Text(" Buy")
+                HStack(spacing: 4) {
+                    LSymbol(key: "cart", size: 11, weight: .heavy)
+                    Text("BUY")
                 }
+                .font(.manrope(10, .heavy)).tracking(1.2)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(L.ink, in: Capsule())
+                .foregroundStyle(.white)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
         .overlay(alignment: .bottom) {
             if !isLast {
-                Rectangle().fill(L.ink.opacity(0.06)).frame(height: 0.5).padding(.leading, 74)
+                Hairline(inset: 70)
             }
+        }
+    }
+}
+
+// MARK: - Nutrition primitives
+
+/// Lifesum-style large ring + percent + label.
+private struct LSNutritionDial: View {
+    let label: String
+    let percent: Double
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle().stroke(L.inset, lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: CGFloat(max(0, min(1, percent))))
+                    .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int((percent * 100).rounded()))%")
+                    .font(.manrope(16, .heavy))
+                    .foregroundStyle(L.ink)
+            }
+            .frame(width: 72, height: 72)
+            Text(label)
+                .font(.manrope(12, .heavy))
+                .tracking(0.4)
+                .foregroundStyle(L.muted)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct NutrientRow: View {
+    let label: String
+    let value: String
+    let isLast: Bool
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(label)
+                    .font(.manrope(15, .heavy))
+                    .foregroundStyle(L.ink)
+                Spacer()
+                Text(value)
+                    .font(.manrope(15, .heavy))
+                    .foregroundStyle(L.ink)
+            }
+            .padding(.vertical, 14)
+            if !isLast { Hairline() }
         }
     }
 }
