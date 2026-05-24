@@ -2,58 +2,160 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
-/// Full-screen scan flow — three modes, dispatched by `ScanKind`.
+/// Full-screen unified scan flow — Cal-AI-style mode switcher at the bottom
+/// lets the user swap between four ways to add fridge items without backing
+/// out to a sheet:
 ///
 /// - .fridge   → multi-shelf capture → GPT-4o vision → verify
 /// - .receipt  → single capture → Apple Vision OCR → GPT-4.1-mini → verify
 /// - .barcode  → live detection → Open Food Facts lookup → verify
+/// - .library  → PHPicker → re-route into fridge or receipt pipeline based
+///               on the user's intent
+///
+/// On first launch the user sees the 3-step ScanInstructionsView (see
+/// `hasSeenScanInstructions` @AppStorage). After that, opens straight to
+/// the camera.
 struct ScanFlowView: View {
     @Environment(AppState.self) private var app
-    let kind: ScanKind
+    /// Starting mode (set by the caller — usually .fridge from the FAB).
+    let initialMode: ScanMode
     let onClose: () -> Void
 
     enum Phase: Equatable {
+        case instructions      // Cal-AI 3-step pre-camera onboarding
         case capture           // camera viewfinder
         case identifying       // calling the LLM / OCR
         case verify            // candidates list
         case error(String)
     }
 
+    @State private var mode: ScanMode = .fridge
     @State private var phase: Phase = .capture
     @State private var candidates: [ScanCandidate] = []
     @State private var decisions: [UUID: Decision] = [:]
+    @State private var showLibraryPicker = false
+
+    @AppStorage("hasSeenScanInstructions") private var hasSeenInstructions = false
 
     enum Decision { case yes, no }
+
+    /// Mode binding plumbed into the bottom mode bar; switching mode also
+    /// pops back to .capture (so you don't get stuck in identifying when you
+    /// tap a different mode mid-load).
+    private var modeBinding: Binding<ScanMode> {
+        Binding(
+            get: { mode },
+            set: { newMode in
+                mode = newMode
+                phase = .capture
+                if newMode == .library { showLibraryPicker = true }
+            }
+        )
+    }
 
     var body: some View {
         ZStack {
             L.ink.ignoresSafeArea()
 
-            switch (kind, phase) {
-            case (.fridge, .capture):
-                FridgeRecordingStage(onClose: onClose, onDone: runFridgeAI)
-                    .ignoresSafeArea()
+            switch phase {
+            case .instructions:
+                ScanInstructionsView(
+                    steps: ScanInstructionsView.fridgeSteps,
+                    onClose: onClose,
+                    onFinish: {
+                        hasSeenInstructions = true
+                        phase = .capture
+                    }
+                )
 
-            case (.receipt, .capture):
-                SinglePhotoCaptureStage(kind: .receipt, onClose: onClose, onCaptured: runReceiptAI)
-                    .ignoresSafeArea()
+            case .capture:
+                captureStage
 
-            case (.barcode, .capture):
-                LiveBarcodeStage(onClose: onClose, onDetect: runBarcodeLookup)
-                    .ignoresSafeArea()
+            case .identifying:
+                IdentifyingStage(kind: effectiveKind, items: candidates)
 
-            case (_, .identifying):
-                IdentifyingStage(kind: kind, items: candidates)
-
-            case (_, .verify):
+            case .verify:
                 VerifyStage(
-                    kind: kind, candidates: $candidates, decisions: $decisions,
+                    kind: effectiveKind, candidates: $candidates, decisions: $decisions,
                     onClose: onClose, onConfirm: commit
                 )
 
-            case (_, .error(let message)):
+            case .error(let message):
                 ErrorStage(message: message, onRetry: { phase = .capture }, onClose: onClose)
             }
+        }
+        .task {
+            mode = initialMode
+            if !hasSeenInstructions { phase = .instructions }
+            if initialMode == .library { showLibraryPicker = true }
+        }
+        .sheet(isPresented: $showLibraryPicker) {
+            LibraryPicker(
+                onPicked: { image in
+                    showLibraryPicker = false
+                    // Library photos are treated as fridge shelf snaps by
+                    // default — same downstream pipeline.
+                    runFridgeAI([image])
+                },
+                onCancel: {
+                    showLibraryPicker = false
+                    // If they cancelled and we're sitting on library mode,
+                    // drop back to fridge so the camera previews again.
+                    if mode == .library { mode = .fridge }
+                }
+            )
+        }
+    }
+
+    /// Effective scan kind for the verify/identifying stages — library maps
+    /// to fridge since that's the pipeline we routed it through.
+    private var effectiveKind: ScanKind {
+        mode.scanKind ?? .fridge
+    }
+
+    /// The actual camera content for the current mode. The mode bar is
+    /// overlaid at the bottom of each.
+    @ViewBuilder
+    private var captureStage: some View {
+        switch mode {
+        case .fridge:
+            FridgeRecordingStage(
+                onClose: onClose, onDone: runFridgeAI,
+                modeBar: { ScanModeBar(selected: modeBinding) }
+            )
+            .ignoresSafeArea()
+        case .receipt:
+            SinglePhotoCaptureStage(
+                kind: .receipt, onClose: onClose, onCaptured: runReceiptAI,
+                modeBar: { ScanModeBar(selected: modeBinding) }
+            )
+            .ignoresSafeArea()
+        case .barcode:
+            LiveBarcodeStage(
+                onClose: onClose, onDetect: runBarcodeLookup,
+                modeBar: { ScanModeBar(selected: modeBinding) }
+            )
+            .ignoresSafeArea()
+        case .library:
+            // Visible camera-style placeholder while the picker sheet is up.
+            Color.black.ignoresSafeArea()
+                .overlay(alignment: .center) {
+                    VStack(spacing: 14) {
+                        LSymbol(key: "image", size: 36, weight: .semibold)
+                            .foregroundStyle(L.cream.opacity(0.7))
+                        Text("Pick a photo from your library")
+                            .font(.manrope(14, .heavy))
+                            .foregroundStyle(L.cream.opacity(0.7))
+                    }
+                }
+                .overlay(alignment: .top) {
+                    TopChrome(title: "Library", onClose: onClose)
+                }
+                .overlay(alignment: .bottom) {
+                    ScanModeBar(selected: modeBinding)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 42)
+                }
         }
     }
 
@@ -128,7 +230,7 @@ struct ScanFlowView: View {
                 category: c.category,
                 qty: c.qty,
                 daysLeft: c.daysLeft,
-                source: source(for: kind)
+                source: source(for: effectiveKind)
             )
         }
         if !items.isEmpty {
@@ -147,9 +249,10 @@ struct ScanFlowView: View {
 
 // MARK: - Fridge recording (sweep-the-fridge UX → multiple stills under the hood)
 
-private struct FridgeRecordingStage: View {
+private struct FridgeRecordingStage<ModeBar: View>: View {
     let onClose: () -> Void
     let onDone: ([UIImage]) -> Void
+    @ViewBuilder var modeBar: () -> ModeBar
 
     @State private var sampler = VideoFrameSampler()
     @State private var stopping = false
@@ -199,7 +302,11 @@ private struct FridgeRecordingStage: View {
                     .foregroundStyle(L.cream.opacity(0.85))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                    .padding(.bottom, 22)
+                    .padding(.bottom, 18)
+
+                modeBar()
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 16)
 
                 RecordButton(isRecording: sampler.isSampling) {
                     handleTap()
@@ -339,10 +446,11 @@ private struct RecordingPill: View {
 
 // MARK: - Single photo capture (receipt)
 
-private struct SinglePhotoCaptureStage: View {
+private struct SinglePhotoCaptureStage<ModeBar: View>: View {
     let kind: ScanKind
     let onClose: () -> Void
     let onCaptured: (UIImage) -> Void
+    @ViewBuilder var modeBar: () -> ModeBar
 
     @State private var camera = CameraController()
     @State private var flash = false
@@ -360,6 +468,10 @@ private struct SinglePhotoCaptureStage: View {
                 Spacer()
                 HelperBanner(text: helperText)
                     .padding(.horizontal, 22)
+                    .padding(.bottom, 16)
+                modeBar()
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 16)
                 shutterRow
                     .padding(.horizontal, 36)
                     .padding(.bottom, 30)
@@ -422,9 +534,10 @@ private struct SinglePhotoCaptureStage: View {
 
 // MARK: - Live barcode
 
-private struct LiveBarcodeStage: View {
+private struct LiveBarcodeStage<ModeBar: View>: View {
     let onClose: () -> Void
     let onDetect: (String) -> Void
+    @ViewBuilder var modeBar: () -> ModeBar
 
     @State private var scanner = BarcodeScanner()
     @State private var detected: String?
@@ -442,6 +555,9 @@ private struct LiveBarcodeStage: View {
                 Spacer()
                 HelperBanner(text: detected.map { "Code: \($0)" } ?? "Center the barcode in the frame. We'll do the rest.")
                     .padding(.horizontal, 22)
+                    .padding(.bottom, 16)
+                modeBar()
+                    .padding(.horizontal, 14)
                     .padding(.bottom, 30)
             }
             BarcodeFrame()

@@ -3,7 +3,11 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(AppState.self) private var app
     @State private var scanSheetOpen = false
-    @State private var presentedScan: ScanKind? = nil
+    /// What mode to open the unified scan camera in. nil means it's closed.
+    /// The user picks Add-to-fridge or Log-a-meal in the ScanSheet; from
+    /// inside the camera they swap fridge / receipt / barcode / library
+    /// inline via the bottom mode bar.
+    @State private var presentedScanMode: ScanMode? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,28 +24,30 @@ struct MainTabView: View {
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: $scanSheetOpen) {
             ScanSheetView(
-                onFridge:   { scanSheetOpen = false; presentedScan = .fridge },
-                onReceipt:  { scanSheetOpen = false; presentedScan = .receipt },
-                onBarcode:  { scanSheetOpen = false; presentedScan = .barcode },
-                onVoice:    { scanSheetOpen = false },
-                onLogMeal:  { scanSheetOpen = false; app.presentingLogMeal = true }
+                onAddToFridge: {
+                    scanSheetOpen = false
+                    presentedScanMode = .fridge
+                },
+                onLogMeal: {
+                    scanSheetOpen = false
+                    app.presentingLogMeal = true
+                }
             )
-            .presentationDetents([.height(540)])
+            .presentationDetents([.height(340)])
             .presentationCornerRadius(28)
             .presentationDragIndicator(.visible)
             .presentationBackground(L.paper)
         }
-        .fullScreenCover(item: $presentedScan) { kind in
-            ScanFlowView(kind: kind) {
-                presentedScan = nil
+        .fullScreenCover(item: $presentedScanMode) { mode in
+            ScanFlowView(initialMode: mode) {
+                presentedScanMode = nil
             }
         }
-        // HomeView and other in-app surfaces can request a scan by setting
-        // `app.presentingScan` — mirror that into the local @State that drives
-        // the fullScreenCover.
+        // HomeView and other in-app surfaces can still request a specific
+        // mode via `app.presentingScan` — mirror that into the local @State.
         .onChange(of: app.presentingScan) { _, new in
             if let kind = new {
-                presentedScan = kind
+                presentedScanMode = ScanMode.fromKind(kind)
                 app.presentingScan = nil
             }
         }
@@ -80,6 +86,19 @@ struct MainTabView: View {
 
 extension ScanKind: Identifiable {
     public var id: String { rawValue }
+}
+
+extension ScanMode: Identifiable {
+    var id: String { rawValue }
+    /// Map a legacy `ScanKind` (still used internally by AppState +
+    /// `IdentifyingStage`) to the new unified mode enum.
+    static func fromKind(_ k: ScanKind) -> ScanMode {
+        switch k {
+        case .fridge:  return .fridge
+        case .receipt: return .receipt
+        case .barcode: return .barcode
+        }
+    }
 }
 
 /// Lifesum-style bottom bar: subtle gray icons, green active, center

@@ -15,6 +15,7 @@ struct LogMealView: View {
     @Environment(AppState.self) private var app
 
     enum Phase: Equatable {
+        case instructions   // Cal-AI 3-step pre-camera onboarding
         case capture
         case analyzing
         case result
@@ -25,14 +26,31 @@ struct LogMealView: View {
     @State private var capturedImage: UIImage?
     @State private var analysis: AnalyzedMeal?
     @State private var saving = false
+    @State private var showLibraryPicker = false
+
+    @AppStorage("hasSeenMealInstructions") private var hasSeenInstructions = false
 
     var body: some View {
         ZStack {
             L.ink.ignoresSafeArea()
 
             switch phase {
+            case .instructions:
+                ScanInstructionsView(
+                    steps: ScanInstructionsView.mealSteps,
+                    onClose: onClose,
+                    onFinish: {
+                        hasSeenInstructions = true
+                        phase = .capture
+                    }
+                )
+
             case .capture:
-                LogMealCaptureStage(onClose: onClose, onCaptured: handleCaptured)
+                LogMealCaptureStage(
+                    onClose: onClose,
+                    onCaptured: handleCaptured,
+                    onLibrary: { showLibraryPicker = true }
+                )
 
             case .analyzing:
                 LogMealAnalyzingStage(image: capturedImage)
@@ -53,6 +71,18 @@ struct LogMealView: View {
             case .error(let msg):
                 LogMealErrorStage(message: msg, onRetry: { phase = .capture }, onClose: onClose)
             }
+        }
+        .task {
+            if !hasSeenInstructions { phase = .instructions }
+        }
+        .sheet(isPresented: $showLibraryPicker) {
+            LibraryPicker(
+                onPicked: { image in
+                    showLibraryPicker = false
+                    handleCaptured(image)
+                },
+                onCancel: { showLibraryPicker = false }
+            )
         }
     }
 
@@ -95,9 +125,13 @@ struct LogMealView: View {
 private struct LogMealCaptureStage: View {
     let onClose: () -> Void
     let onCaptured: (UIImage) -> Void
+    /// Tapping Library in the bottom mode bar bubbles up so the parent can
+    /// present a PHPicker sheet.
+    let onLibrary: () -> Void
 
     @State private var camera = CameraController()
     @State private var flash = false
+    @State private var mode: ScanMode = .fridge   // visually-active tab — meal capture uses fridge slot
 
     var body: some View {
         ZStack {
@@ -112,6 +146,10 @@ private struct LogMealCaptureStage: View {
                 Spacer()
                 helperBanner
                     .padding(.horizontal, 22)
+                    .padding(.bottom, 16)
+                modeBar
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 16)
                 shutterRow
                     .padding(.horizontal, 36)
                     .padding(.bottom, 36)
@@ -129,6 +167,21 @@ private struct LogMealCaptureStage: View {
             await camera.start()
         }
         .onDisappear { camera.stop() }
+    }
+
+    private var modeBar: some View {
+        ScanModeBar(selected: Binding(
+            get: { mode },
+            set: { newMode in
+                // Library bubbles up to parent; everything else stays in-place
+                // visually but doesn't change the meal-capture pipeline.
+                if newMode == .library {
+                    onLibrary()
+                } else {
+                    mode = newMode
+                }
+            }
+        ))
     }
 
     private var topChrome: some View {

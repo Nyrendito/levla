@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Bottom sheet shown when the user taps the center Scan FAB.
-/// Two big choices (Scan fridge / Scan receipt) + three minis (Barcode / Voice / Log a meal).
+/// Slim bottom sheet shown when the user taps the center Scan FAB.
+///
+/// Cal-AI-style two-option router: pick *what* you're adding (fridge items
+/// or a logged meal). The actual mode (fridge / receipt / barcode / library)
+/// is selected *inside* the camera screen via its bottom mode bar — no
+/// need to back out to switch.
 struct ScanSheetView: View {
-    let onFridge: () -> Void
-    let onReceipt: () -> Void
-    let onBarcode: () -> Void
-    let onVoice: () -> Void
+    let onAddToFridge: () -> Void
     let onLogMeal: () -> Void
 
     var body: some View {
@@ -22,17 +23,22 @@ struct ScanSheetView: View {
             }
 
             HStack(spacing: 12) {
-                ScanChoiceCard(icon: "fridge",  title: "Scan fridge",  sub: "One shot, AI does the rest", tone: .mint, action: onFridge)
-                ScanChoiceCard(icon: "receipt", title: "Scan receipt", sub: "Fills your fridge in one go",    tone: .pop,  action: onReceipt)
+                ScanChoiceCard(
+                    icon: "fridge",
+                    title: "Add to fridge",
+                    sub: "Scan fridge, a receipt, a barcode, or pick a photo.",
+                    tone: .mint,
+                    action: onAddToFridge
+                )
+                ScanChoiceCard(
+                    icon: "camera",
+                    title: "Log a meal",
+                    sub: "Snap your plate — get kcal, protein, carbs, fat.",
+                    tone: .pop,
+                    action: onLogMeal
+                )
             }
             .padding(.top, 18)
-
-            VStack(spacing: 8) {
-                ScanMiniRow(icon: "camera",label: "Log a meal",          sub: "Snap a photo — get kcal, protein, carbs, fat", action: onLogMeal)
-                ScanMiniRow(icon: "scan",  label: "Scan a barcode",      sub: "Quickly add a single product",  action: onBarcode)
-                ScanMiniRow(icon: "mic",   label: "Say what you bought", sub: "Voice quick-add",               action: onVoice)
-            }
-            .padding(.top, 10)
         }
         .padding(.horizontal, 18)
         .padding(.top, 18)
@@ -67,12 +73,12 @@ struct ScanChoiceCard: View {
                         .kerning(-0.4)
                     Text(sub)
                         .font(.manrope(12.5, .semibold))
-                        .opacity(0.78)
+                        .opacity(0.85)
                 }
                 .multilineTextAlignment(.leading)
             }
             .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 156, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 184, alignment: .topLeading)
             .background(bg, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .foregroundStyle(L.cream)
         }
@@ -80,38 +86,4 @@ struct ScanChoiceCard: View {
         .shadow(color: bg.opacity(0.30), radius: 18, x: 0, y: 12)
         .tapPress()
     }
-}
-
-struct ScanMiniRow: View {
-    let icon: String
-    let label: String
-    let sub: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous).fill(L.ink.opacity(0.06))
-                    LSymbol(key: icon, size: 18, weight: .semibold).foregroundStyle(L.ink)
-                }
-                .frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(label).font(.manrope(14, .heavy)).kerning(-0.2).foregroundStyle(L.ink)
-                    Text(sub).font(.manrope(11.5, .semibold)).foregroundStyle(L.ink.opacity(0.5))
-                }
-                Spacer()
-                LSymbol(key: "chevron", size: 16, weight: .semibold).foregroundStyle(L.ink.opacity(0.4))
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .modifier(_MiniRowShadow())
-        .tapPress()
-    }
-}
-
-private struct _MiniRowShadow: ViewModifier {
-    func body(content: Content) -> some View { L.Shadow.card(content) }
 }
