@@ -155,10 +155,8 @@ private struct LogMealCaptureStage: View {
                     .padding(.bottom, 36)
             }
 
-            // Square framing guide.
-            RoundedRectangle(cornerRadius: 24)
-                .strokeBorder(L.cream.opacity(0.5), lineWidth: 1.5)
-                .padding(48)
+            // Minimalist viewfinder — 4 rounded L-corners hugging the screen.
+            CameraCornerBrackets(topInset: 100, bottomInset: 230)
 
             if flash { Color.white.opacity(0.9).ignoresSafeArea().transition(.opacity) }
         }
@@ -206,15 +204,17 @@ private struct LogMealCaptureStage: View {
     }
 
     private var helperBanner: some View {
-        VStack(spacing: 6) {
-            Text("Snap your meal")
-                .font(.manrope(20, .heavy))
-                .foregroundStyle(.white)
-            Text("Levla figures out the protein, carbs, fat & kcal.")
-                .font(.manrope(13, .semibold))
-                .foregroundStyle(.white.opacity(0.8))
+        // Compact one-line helper so it doesn't crowd the mode bar / shutter.
+        HStack(spacing: 8) {
+            AIDot(color: L.brand, size: 8)
+            Text("Snap your meal — Levla reads protein, carbs, fat & kcal.")
+                .font(.manrope(12.5, .heavy))
+                .kerning(-0.1)
+                .foregroundStyle(L.cream)
         }
-        .padding(.bottom, 14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(hex: 0x0F0C08).opacity(0.7), in: Capsule())
     }
 
     private var shutterRow: some View {
@@ -370,16 +370,28 @@ private struct LogMealResultStage: View {
     }
 
     private var titleBlock: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(meal.name)
                 .font(.manrope(24, .heavy))
                 .kerning(-0.6)
                 .foregroundStyle(L.ink)
                 .multilineTextAlignment(.center)
-            Text(meal.displayConfidence.uppercased())
-                .font(.manrope(10, .heavy))
-                .tracking(1.4)
-                .foregroundStyle(L.muted)
+
+            HStack(spacing: 8) {
+                if let portion = meal.portionLabel {
+                    Text(portion)
+                        .font(.manrope(11.5, .heavy))
+                        .tracking(0.4)
+                        .foregroundStyle(L.brand)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(L.brandBg, in: Capsule())
+                }
+                Text(meal.displayConfidence.uppercased())
+                    .font(.manrope(10, .heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(L.muted)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -457,10 +469,21 @@ private struct LogMealResultStage: View {
                 ForEach(Array(meal.ingredients.enumerated()), id: \.element.id) { (i, ing) in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(ing.name)
-                                .font(.manrope(15, .heavy))
-                                .kerning(-0.2)
-                                .foregroundStyle(L.ink)
+                            HStack(spacing: 6) {
+                                Text(ing.name)
+                                    .font(.manrope(15, .heavy))
+                                    .kerning(-0.2)
+                                    .foregroundStyle(L.ink)
+                                if ing.grams > 0 {
+                                    Text("\(ing.grams)g")
+                                        .font(.manrope(11, .heavy))
+                                        .tracking(0.2)
+                                        .foregroundStyle(L.brand)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(L.brandBg, in: Capsule())
+                                }
+                            }
                             HStack(spacing: 6) {
                                 Text("\(ing.protein)P")
                                 Text("·").foregroundStyle(L.muted.opacity(0.4))

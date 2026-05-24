@@ -5,8 +5,12 @@ import Supabase
 /// Result of analyzing a meal photo via the `analyze-meal` Edge Function.
 /// Mirrors the JSON schema the function returns, with permissive decoding
 /// to absorb the occasional snake_case / string-number drift.
+///
+/// `portionGrams` is the model's gram estimate for the VISIBLE portion in
+/// the photo — kcal/macros are computed from that, not a generic 1-serving.
 struct AnalyzedMeal: Hashable, Sendable {
     var name: String
+    var portionGrams: Int
     var kcal: Int
     var protein: Int
     var carbs: Int
@@ -22,11 +26,18 @@ struct AnalyzedMeal: Hashable, Sendable {
         default: return "Best guess"
         }
     }
+
+    /// "~340g" style portion label; nil if the model couldn't size it.
+    var portionLabel: String? {
+        guard portionGrams > 0 else { return nil }
+        return "~\(portionGrams)g portion"
+    }
 }
 
 struct AnalyzedIngredient: Hashable, Sendable, Identifiable {
     let id = UUID()
     var name: String
+    var grams: Int
     var kcal: Int
     var protein: Int
     var carbs: Int
@@ -45,12 +56,13 @@ final class MealAnalyzer {
             // Offline mock — useful in simulator without a key.
             return AnalyzedMeal(
                 name: "Mixed salad bowl",
+                portionGrams: 320,
                 kcal: 420, protein: 28, carbs: 32, fat: 22,
                 confidence: 0.55,
                 ingredients: [
-                    AnalyzedIngredient(name: "Chicken breast", kcal: 180, protein: 24, carbs: 0, fat: 6),
-                    AnalyzedIngredient(name: "Leafy greens",   kcal: 30,  protein: 2,  carbs: 6, fat: 0),
-                    AnalyzedIngredient(name: "Dressing",       kcal: 210, protein: 2,  carbs: 26, fat: 16),
+                    AnalyzedIngredient(name: "Chicken breast", grams: 120, kcal: 180, protein: 24, carbs: 0, fat: 6),
+                    AnalyzedIngredient(name: "Leafy greens",   grams: 80,  kcal: 30,  protein: 2,  carbs: 6, fat: 0),
+                    AnalyzedIngredient(name: "Dressing",       grams: 30,  kcal: 210, protein: 2,  carbs: 26, fat: 16),
                 ]
             )
         }
@@ -109,6 +121,7 @@ final class MealAnalyzer {
         let ingredients: [AnalyzedIngredient] = ingRaw.map { d in
             AnalyzedIngredient(
                 name:    str(d, "name", "title") ?? "Ingredient",
+                grams:   int(d, "grams", "weight_g", "amount_g") ?? 0,
                 kcal:    int(d, "kcal", "calories") ?? 0,
                 protein: int(d, "protein", "protein_g") ?? 0,
                 carbs:   int(d, "carbs", "carbs_g") ?? 0,
@@ -116,13 +129,16 @@ final class MealAnalyzer {
             )
         }
 
+        let computedPortion = ingredients.map(\.grams).reduce(0, +)
+
         return AnalyzedMeal(
-            name:       str(mealDict, "name", "title", "label") ?? "Meal",
-            kcal:       int(mealDict, "kcal", "calories") ?? 0,
-            protein:    int(mealDict, "protein", "protein_g") ?? 0,
-            carbs:      int(mealDict, "carbs", "carbs_g") ?? 0,
-            fat:        int(mealDict, "fat", "fat_g") ?? 0,
-            confidence: double(mealDict, "confidence", "score") ?? 0.7,
+            name:        str(mealDict, "name", "title", "label") ?? "Meal",
+            portionGrams: int(mealDict, "portion_g", "portionGrams", "total_g") ?? computedPortion,
+            kcal:        int(mealDict, "kcal", "calories") ?? 0,
+            protein:     int(mealDict, "protein", "protein_g") ?? 0,
+            carbs:       int(mealDict, "carbs", "carbs_g") ?? 0,
+            fat:         int(mealDict, "fat", "fat_g") ?? 0,
+            confidence:  double(mealDict, "confidence", "score") ?? 0.7,
             ingredients: ingredients
         )
     }

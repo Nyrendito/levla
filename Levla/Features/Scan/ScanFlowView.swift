@@ -313,6 +313,9 @@ private struct FridgeRecordingStage<ModeBar: View>: View {
                 }
                 .padding(.bottom, 36)
             }
+
+            // Minimalist viewfinder — 4 rounded L-corners in the screen corners.
+            CameraCornerBrackets()
         }
         .task {
             await sampler.requestAccess()
@@ -476,7 +479,7 @@ private struct SinglePhotoCaptureStage<ModeBar: View>: View {
                     .padding(.horizontal, 36)
                     .padding(.bottom, 30)
             }
-            ViewfinderCorners().padding(60)
+            CameraCornerBrackets()
             if flash { Color.white.opacity(0.9).ignoresSafeArea().transition(.opacity) }
         }
         .task {
