@@ -120,7 +120,7 @@ struct ScanFlowView: View {
         switch mode {
         case .fridge:
             FridgeRecordingStage(
-                onClose: onClose, onDone: runFridgeAI,
+                onClose: onClose, onDone: runFridgeVideoAI,
                 modeBar: { ScanModeBar(selected: modeBinding) }
             )
             .ignoresSafeArea()
@@ -161,6 +161,27 @@ struct ScanFlowView: View {
 
     // MARK: - AI dispatchers
 
+    /// Primary path: one short video clip → Gemini 2.5 Flash native video.
+    /// Replaces the older multi-image grid → GPT-4o-mini pipeline.
+    private func runFridgeVideoAI(_ videoData: Data) {
+        guard !videoData.isEmpty else {
+            phase = .error("No clip captured — try recording again.")
+            return
+        }
+        phase = .identifying
+        Task {
+            do {
+                candidates = try await AIScanService.shared.scanFridge(videoData: videoData)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                phase = .verify
+            } catch {
+                phase = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Legacy multi-image dispatcher. Kept for the library-picker path and
+    /// for the offline / simulator fallback where we can't record video.
     private func runFridgeAI(_ images: [UIImage]) {
         guard !images.isEmpty else {
             phase = .error("No frames captured — try recording again.")
@@ -247,14 +268,17 @@ struct ScanFlowView: View {
     }
 }
 
-// MARK: - Fridge recording (sweep-the-fridge UX → multiple stills under the hood)
+// MARK: - Fridge recording (records a real video clip for Gemini)
 
 private struct FridgeRecordingStage<ModeBar: View>: View {
     let onClose: () -> Void
-    let onDone: ([UIImage]) -> Void
+    /// Called with the compressed H.264 clip bytes once the user finishes
+    /// recording. The parent (ScanFlowView) ships this to the Gemini-backed
+    /// scan-fridge function for a single native-video inference call.
+    let onDone: (Data) -> Void
     @ViewBuilder var modeBar: () -> ModeBar
 
-    @State private var sampler = VideoFrameSampler()
+    @State private var recorder = FridgeVideoRecorder()
     @State private var stopping = false
 
     #if targetEnvironment(simulator)
@@ -265,8 +289,8 @@ private struct FridgeRecordingStage<ModeBar: View>: View {
 
     var body: some View {
         ZStack {
-            if sampler.isAuthorized {
-                SamplerPreview(session: sampler.captureSession).ignoresSafeArea()
+            if recorder.isAuthorized {
+                FridgeRecorderPreview(session: recorder.captureSession).ignoresSafeArea()
             } else {
                 CameraPermissionMessage()
             }
@@ -289,8 +313,8 @@ private struct FridgeRecordingStage<ModeBar: View>: View {
                 }
 
                 // The only "you are recording" affordance — pulsing red dot + timer.
-                if sampler.isSampling {
-                    RecordingPill(seconds: sampler.elapsedSeconds)
+                if recorder.isRecording {
+                    RecordingPill(seconds: recorder.elapsedSeconds)
                         .padding(.top, 10)
                         .transition(.scale.combined(with: .opacity))
                 }
@@ -308,7 +332,7 @@ private struct FridgeRecordingStage<ModeBar: View>: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 16)
 
-                RecordButton(isRecording: sampler.isSampling) {
+                RecordButton(isRecording: recorder.isRecording) {
                     handleTap()
                 }
                 .padding(.bottom, 36)
@@ -318,53 +342,44 @@ private struct FridgeRecordingStage<ModeBar: View>: View {
             CameraCornerBrackets()
         }
         .task {
-            await sampler.requestAccess()
-            await sampler.start()
-            // Auto-ship the moment the sampler hits maxFrames so the user
-            // never lands in a "stopped, now what?" state.
-            sampler.onAutoComplete = {
-                finishAndSend()
+            await recorder.requestAccess()
+            await recorder.start()
+            recorder.onAutoComplete = {
+                Task { await finishAndSend() }
             }
         }
-        .onDisappear { sampler.stop() }
-        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: sampler.isSampling)
+        .onDisappear { recorder.stop() }
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: recorder.isRecording)
     }
 
     private var helperText: String {
-        if stopping {
-            return "Analyzing your fridge…"
-        }
-        if !sampler.isSampling {
-            if sampler.sampledFrames.isEmpty {
-                return "Tap to record. Slowly sweep your fridge — shelves and drawers."
-            } else {
-                return "Tap to send what you've got."
-            }
+        if stopping { return "Analyzing your fridge…" }
+        if !recorder.isRecording {
+            return "Tap to record. Sweep your fridge — shelves and drawers."
         }
         return "Recording. Sweep slowly — Levla's watching."
     }
 
     /// One unified tap handler so we never hit a dead-button state:
-    /// - sampling now            → stop & send
-    /// - stopped, have frames    → send what we've got
-    /// - stopped, no frames      → start a fresh recording
+    /// - recording now → stop & send the clip
+    /// - idle          → start a fresh recording
     private func handleTap() {
-        if sampler.isSampling {
-            finishAndSend()
-        } else if !sampler.sampledFrames.isEmpty {
-            finishAndSend()
+        if recorder.isRecording {
+            Task { await finishAndSend() }
         } else {
-            sampler.startSampling()
+            recorder.startRecording()
         }
     }
 
-    private func finishAndSend() {
+    private func finishAndSend() async {
         guard !stopping else { return }
         stopping = true
-        sampler.stopSampling()
-        // Tiny pause so the model has the very last frame in the buffer.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            onDone(sampler.sampledFrames)
+        let data = await recorder.stopRecording()
+        if let data, !data.isEmpty {
+            onDone(data)
+        } else {
+            // Recording failed — bounce back to the capture state.
+            stopping = false
         }
     }
 }

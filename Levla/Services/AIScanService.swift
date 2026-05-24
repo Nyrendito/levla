@@ -12,14 +12,37 @@ final class AIScanService {
 
     // MARK: - Public API
 
-    /// Send N shelf photos to GPT-4o via the `scan-fridge` Edge Function.
-    /// Returns the parsed candidates (already mapped to Levla's food keys).
+    /// Send a short fridge sweep clip to Gemini 2.5 Flash via the
+    /// `scan-fridge` Edge Function. Returns parsed candidates ready for the
+    /// verify list. This is the primary entry point for the iOS device path.
+    ///
+    /// One inline base64 video is a fraction of the token cost (and a much
+    /// better signal — the model sees motion + context, not isolated stills)
+    /// compared to the older `scanFridge(images:)` photo-grid path.
+    func scanFridge(videoData: Data) async throws -> [ScanCandidate] {
+        guard !videoData.isEmpty else { return [] }
+        guard let client = supabase.client else { return [] }
+        try await requireSession(client: client)
+
+        let payload = FridgeVideoRequest(
+            video: "data:video/mp4;base64,\(videoData.base64EncodedString())"
+        )
+        let decoded: ScanItemsResponse = try await client.functions.invoke(
+            "scan-fridge",
+            options: .init(body: payload)
+        )
+        return decoded.items.map { $0.toCandidate() }
+    }
+
+    /// Legacy multi-image path. Kept around as a fallback for offline /
+    /// simulator (where AVCaptureMovieFileOutput can't run), but the real-
+    /// device flow now uses `scanFridge(videoData:)`.
     func scanFridge(images: [UIImage]) async throws -> [ScanCandidate] {
         guard !images.isEmpty else { return [] }
 
         if supabase.isOffline {
             // Best-effort local fallback: classify the first image with Apple
-            // Vision. Not as good as GPT-4o, but the app stays usable.
+            // Vision. Used in the simulator + when offline.
             return await VisionRecognizer.classify(images[0], kind: .fridge)
         }
 
@@ -32,9 +55,6 @@ final class AIScanService {
         }
 
         let payload = FridgeScanRequest(images: dataURIs)
-        // Decode straight into our response type. Asking for `Data` here
-        // makes the SDK try JSONDecoder.decode(Data.self, …) which expects a
-        // base64 string — our response is a JSON object → DecodingError.
         let decoded: ScanItemsResponse = try await client.functions.invoke(
             "scan-fridge",
             options: .init(body: payload)
@@ -111,6 +131,8 @@ final class AIScanService {
     // MARK: - Wire types
 
     private struct FridgeScanRequest: Encodable { let images: [String] }
+    /// Video-first scan payload. `video` is a `data:video/mp4;base64,…` URI.
+    private struct FridgeVideoRequest: Encodable { let video: String }
     private struct ReceiptScanRequest: Encodable { let text: String }
     private struct BarcodeRequest: Encodable { let code: String }
 
