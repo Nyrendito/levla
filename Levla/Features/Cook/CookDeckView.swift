@@ -41,6 +41,7 @@ struct CookDeckView: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
 
                 if idx < source.count {
                     actionRow
@@ -96,32 +97,36 @@ struct CookDeckView: View {
     // MARK: - Deck
 
     private var deckStack: some View {
-        GeometryReader { _ in
+        // One outer GeometryReader resolves the deck area's real size,
+        // and we pass that size DOWN to each SwipeCard explicitly. No
+        // nested GeometryReaders — those gave SwiftUI an unbounded
+        // proposal and the cards overflowed off-screen.
+        GeometryReader { proxy in
             ZStack {
                 if idx + 2 < source.count {
-                    cardView(source[idx + 2])
+                    cardView(source[idx + 2], size: proxy.size)
                         .scaleEffect(0.92)
                         .offset(y: 20)
                         .opacity(0.55)
                         .allowsHitTesting(false)
                 }
                 if idx + 1 < source.count {
-                    cardView(source[idx + 1])
+                    cardView(source[idx + 1], size: proxy.size)
                         .scaleEffect(0.96)
                         .offset(y: 10)
                         .opacity(0.85)
                         .allowsHitTesting(false)
                 }
-                topCard
+                topCard(size: proxy.size)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 
     @ViewBuilder
-    private var topCard: some View {
+    private func topCard(size: CGSize) -> some View {
         let match = source[idx]
-        cardView(match)
+        cardView(match, size: size)
             .offset(dragOffset)
             .rotationEffect(.degrees(Double(dragOffset.width / 18)))
             .gesture(
@@ -141,8 +146,8 @@ struct CookDeckView: View {
             .onTapGesture { openedRecipe = match.recipe }
     }
 
-    private func cardView(_ m: RecipeMatch) -> some View {
-        SwipeCard(match: m,
+    private func cardView(_ m: RecipeMatch, size: CGSize) -> some View {
+        SwipeCard(match: m, size: size,
                   dragX: dragOffset.width, dragY: dragOffset.height)
     }
 
@@ -188,6 +193,7 @@ struct CookDeckView: View {
 
 private struct SwipeCard: View {
     let match: RecipeMatch
+    let size: CGSize
     var dragX: CGFloat = 0
     var dragY: CGFloat = 0
 
@@ -198,9 +204,7 @@ private struct SwipeCard: View {
     private var upOpacity:  Double { Double(min(1, max(0, -dragY / 80))) }
 
     var body: some View {
-        GeometryReader { proxy in
-            cardContent(size: proxy.size)
-        }
+        cardContent(size: size)
     }
 
     private func cardContent(size: CGSize) -> some View {
