@@ -18,12 +18,27 @@ final class CookedLogService {
 
     // MARK: - Today's totals
 
-    var todayKcal:    Int { todayEntries.reduce(0) { $0 + $1.kcal } }
-    var todayProtein: Int { todayEntries.reduce(0) { $0 + $1.protein } }
-    var todayCarbs:   Int { todayEntries.reduce(0) { $0 + $1.carbs } }
-    var todayFat:     Int { todayEntries.reduce(0) { $0 + $1.fat } }
+    /// Entries that actually fall on the current local-calendar day. We
+    /// filter at the property level rather than trusting `todayEntries`
+    /// blindly — if the clock rolled past midnight while the app was open
+    /// and we haven't refetched yet, this guarantees yesterday's entries
+    /// don't keep counting toward today's macros.
+    private var filteredToday: [CookedEntry] {
+        let cal = Calendar.current
+        return todayEntries.filter { cal.isDateInToday($0.cookedAt) }
+    }
 
-    var hasAnyToday: Bool { !todayEntries.isEmpty }
+    var todayKcal:    Int { filteredToday.reduce(0) { $0 + $1.kcal } }
+    var todayProtein: Int { filteredToday.reduce(0) { $0 + $1.protein } }
+    var todayCarbs:   Int { filteredToday.reduce(0) { $0 + $1.carbs } }
+    var todayFat:     Int { filteredToday.reduce(0) { $0 + $1.fat } }
+
+    var hasAnyToday: Bool { !filteredToday.isEmpty }
+
+    /// The local-calendar day for which `todayEntries` was last fetched.
+    /// Used to decide whether a foreground / day-change event needs to
+    /// trigger a refetch.
+    private(set) var loadedDay: Date? = nil
 
     // MARK: - Reload + log
 
@@ -32,14 +47,17 @@ final class CookedLogService {
         isLoading = true
         defer { isLoading = false }
 
+        let cal = Calendar.current
+        let startOfDay = cal.startOfDay(for: Date())
+
         if supabase.isOffline {
             todayEntries = offlineStore.filter { isToday($0.cookedAt) }
+            loadedDay = startOfDay
             return
         }
 
         guard let client = supabase.client else { return }
 
-        let startOfDay = Calendar.current.startOfDay(for: Date())
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let startISO = iso.string(from: startOfDay)
@@ -54,9 +72,22 @@ final class CookedLogService {
                 .execute()
                 .value
             todayEntries = rows
+            loadedDay = startOfDay
         } catch {
             // soft fail — show whatever we already had
         }
+    }
+
+    /// Cheap check: if the local calendar day has changed since the last
+    /// reload, trigger a refetch. Called on app-foreground + on the
+    /// `.NSCalendarDayChanged` notification so the home macros zero out at
+    /// midnight even when the app stays open across the rollover.
+    func refreshIfDayChanged(userId: UUID) async {
+        let today = Calendar.current.startOfDay(for: Date())
+        if let last = loadedDay, Calendar.current.isDate(last, inSameDayAs: today) {
+            return
+        }
+        await reloadToday(userId: userId)
     }
 
     /// Pulls the last ~120 days of entries. Backs the Progress tab.
