@@ -1,65 +1,62 @@
 import SwiftUI
 
-/// Home — tracking-style dashboard: brand row, 7-day strip, swipeable stat
-/// carousel, recently added, cook tonight. Mirrors the design's V2HomeTracking.
+/// Home — a decision assistant, not a dashboard.
+/// Answers ONE question: "What should I cook before my food goes bad?"
+///
+/// Structure (top to bottom):
+/// 1. Levla wordmark
+/// 2. "Tonight — cook X" hero (the top-ranked recipe)
+/// 3. Optional featured recipe card
+/// 4. "Use these first" — up to 3 urgent items, as chips
+/// 5. Big Scan fridge CTA
+/// 6. Optional Expiring soon banner (only when something's urgent)
 struct HomeView: View {
     @Environment(AppState.self) private var app
-    @State private var page: Int = 0
-    @State private var selectedDayOffset: Int = 0
     @State private var openedRecipe: Recipe?
 
-    private var cookable: [RecipeMatch] {
-        Array(RecipeMatcher.rank(recipes: app.recipes.recipes, fridge: app.fridge.items).prefix(3))
+    private var matches: [RecipeMatch] {
+        RecipeMatcher.rank(recipes: app.recipes.recipes, fridge: app.fridge.items)
+    }
+    private var topRecipe: RecipeMatch? { matches.first }
+
+    private var useFirst: [FoodItem] {
+        app.fridge.items
+            .filter { $0.status == .today || $0.status == .soon }
+            .sorted(by: { $0.daysLeft < $1.daysLeft })
+            .prefix(3)
+            .map { $0 }
     }
 
-    private var recent: [FoodItem] {
-        Array(app.fridge.items.sorted { $0.addedAt > $1.addedAt }.prefix(3))
-    }
+    private var urgentCount: Int { useFirst.count }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // ambient wash gradient
-                ZStack {
-                    LinearGradient(
-                        colors: [L.pop.opacity(0.10), .clear],
-                        startPoint: .topTrailing, endPoint: .bottomLeading
-                    )
-                    .frame(height: 1)
+                brandRow
+                heroHeadline
+                if !app.fridge.items.isEmpty, let m = topRecipe {
+                    FeaturedRecipeCard(match: m) { openedRecipe = m.recipe }
+                        .padding(.horizontal, L.S.pad)
+                        .padding(.top, 14)
                 }
-                .frame(height: 1)
-                .padding(.top, -1)
+                if !useFirst.isEmpty {
+                    useFirstSection
+                        .padding(.top, 28)
+                }
+                BigCTA(title: "Scan fridge", icon: "camera", kind: .primary) {
+                    app.presentingScan = .fridge
+                }
+                .padding(.horizontal, L.S.pad)
+                .padding(.top, 28)
 
-                brandRow.padding(.top, 54).padding(.horizontal, L.S.pad)
-                dayStrip.padding(.top, 18).padding(.horizontal, L.S.pad)
+                if urgentCount > 0 {
+                    expiringBanner.padding(.top, 14)
+                }
 
-                StatCarousel(
-                    page: $page,
-                    fresh: app.fridge.freshCount,
-                    total: app.fridge.total,
-                    freshPct: app.fridge.freshPct,
-                    today: app.fridge.todayCount,
-                    soon: app.fridge.soonCount,
-                    low: app.fridge.lowCount,
-                    score: app.fridge.fridgeScore
-                )
-                .padding(.top, 24)
-
-                recentlyAddedSection.padding(.top, 30)
-
-                cookTonightSection.padding(.top, 30)
-
-                Color.clear.frame(height: 130) // tab bar gap
+                Color.clear.frame(height: 140)
             }
         }
         .background(L.paper.ignoresSafeArea())
-        .background(
-            RadialGradient(
-                colors: [L.pop.opacity(0.10), .clear],
-                center: .topTrailing, startRadius: 0, endRadius: 320
-            )
-            .ignoresSafeArea()
-        )
         .sheet(item: $openedRecipe) { recipe in
             RecipeDetailView(recipe: recipe) { openedRecipe = nil }
         }
@@ -71,422 +68,190 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Brand row
+    // MARK: - Brand
 
     private var brandRow: some View {
         HStack {
-            HStack(spacing: 10) {
-                FridgeMark()
-                Text("Levla")
-                    .font(.manrope(26, .heavy))
-                    .kerning(-0.8)
-                    .foregroundStyle(L.ink)
-            }
-            Spacer()
-            StreakPill(days: app.fridge.streakDays)
-        }
-    }
-
-    // MARK: - 7-day strip
-
-    private var dayStrip: some View {
-        // 7 days: -3..+3 around today
-        let calendar = Calendar.current
-        let base = Date()
-        let labels = ["S","M","T","W","T","F","S"]
-        return HStack(spacing: 2) {
-            ForEach(-3...3, id: \.self) { offset in
-                let d = calendar.date(byAdding: .day, value: offset, to: base) ?? base
-                let dow = calendar.component(.weekday, from: d) - 1
-                let day = calendar.component(.day, from: d)
-                let badge = expiringCount(forDayOffset: offset)
-                DayDot(
-                    letter: labels[dow % 7],
-                    num: day,
-                    selected: offset == selectedDayOffset,
-                    past: offset < 0,
-                    future: offset > 3,
-                    badge: offset >= 0 && offset <= 2 ? badge : 0
-                ) {
-                    selectedDayOffset = offset
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private func expiringCount(forDayOffset offset: Int) -> Int {
-        app.fridge.items.filter { $0.daysLeft == offset }.count
-    }
-
-    // MARK: - Recently added
-
-    private var recentlyAddedSection: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .lastTextBaseline) {
-                Text("Recently added")
-                    .font(.manrope(24, .heavy))
-                    .kerning(-0.7)
-                    .foregroundStyle(L.ink)
-                Spacer()
-                Button { app.selectedTab = .fridge } label: {
-                    Text("See all")
-                        .font(.manrope(13.5, .heavy))
-                        .foregroundStyle(L.ink.opacity(0.5))
-                }
-                .buttonStyle(.plain)
-            }
-
-            InfoBanner(icon: "bell", text: "Scan a receipt to add up to 20 items in one go.")
-
-            VStack(spacing: 12) {
-                if recent.isEmpty {
-                    EmptyRecentlyAdded()
-                } else {
-                    ForEach(recent) { item in
-                        RecentCard(item: item)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, L.S.pad)
-    }
-
-    // MARK: - Cook tonight
-
-    private var cookTonightSection: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .lastTextBaseline) {
-                Text("Cook tonight")
-                    .font(.manrope(24, .heavy))
-                    .kerning(-0.7)
-                    .foregroundStyle(L.ink)
-                Spacer()
-                Button { app.selectedTab = .cook } label: {
-                    Text("All")
-                        .font(.manrope(13.5, .heavy))
-                        .foregroundStyle(L.ink.opacity(0.5))
-                }
-                .buttonStyle(.plain)
-            }
-
-            VStack(spacing: 14) {
-                if cookable.isEmpty || app.fridge.items.isEmpty {
-                    EmptyCookCard()
-                } else {
-                    ForEach(cookable) { m in
-                        Button { openedRecipe = m.recipe } label: {
-                            TrackRecipeCard(match: m)
-                        }
-                        .buttonStyle(.plain)
-                        .tapPress()
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, L.S.pad)
-    }
-}
-
-private struct EmptyCookCard: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("Scan your fridge first.")
-                .font(.manrope(16, .heavy))
+            Text("Levla")
+                .font(.manrope(26, .heavy))
+                .kerning(-0.8)
                 .foregroundStyle(L.ink)
-            Text("Recipe suggestions appear based on what you actually have.")
-                .font(.manrope(13, .semibold))
-                .foregroundStyle(L.ink.opacity(0.55))
-                .multilineTextAlignment(.center)
+            Spacer()
         }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .modifier(_HomeCardShadow())
+        .padding(.horizontal, L.S.pad)
+        .padding(.top, 56)
     }
-}
 
-// MARK: - Subcomponents
+    // MARK: - Hero
 
-private struct FridgeMark: View {
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(L.ink)
-            VStack(spacing: 6) {
-                Capsule().fill(L.cream.opacity(0.55)).frame(width: 2.5, height: 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 6)
-                Capsule().fill(L.cream.opacity(0.35)).frame(width: 22, height: 1.5)
-                Capsule().fill(L.cream.opacity(0.55)).frame(width: 2.5, height: 5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 6)
+    private var heroHeadline: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("TONIGHT")
+                .font(.mono(11))
+                .tracking(1.2)
+                .foregroundStyle(L.ink.opacity(0.4))
+
+            if app.fridge.items.isEmpty {
+                Text("Scan your fridge\nto get started.")
+                    .font(.manrope(38, .heavy))
+                    .kerning(-1.3)
+                    .lineSpacing(2)
+                    .foregroundStyle(L.ink)
+            } else if let m = topRecipe {
+                Text("Cook \(m.recipe.title).")
+                    .font(.manrope(34, .heavy))
+                    .kerning(-1.2)
+                    .lineSpacing(2)
+                    .foregroundStyle(L.ink)
+                Text(reasonLine(for: m))
+                    .font(.manrope(15, .medium))
+                    .foregroundStyle(L.ink.opacity(0.55))
+                    .padding(.top, 2)
+            } else {
+                Text("Nothing to cook yet.")
+                    .font(.manrope(34, .heavy))
+                    .kerning(-1.2)
+                    .foregroundStyle(L.ink)
             }
         }
-        .frame(width: 34, height: 38)
-        .shadow(color: L.ink.opacity(0.18), radius: 6, x: 0, y: 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, L.S.pad)
+        .padding(.top, 26)
     }
-}
 
-private struct StreakPill: View {
-    let days: Int
-    var body: some View {
-        HStack(spacing: 7) {
-            LSymbol(key: "leaf", size: 17, weight: .semibold).foregroundStyle(L.mint)
-            Text("\(days)").font(.manrope(14.5, .heavy)).kerning(-0.2)
+    private func reasonLine(for m: RecipeMatch) -> String {
+        if !m.useSoonIngredients.isEmpty {
+            let names = m.useSoonIngredients.prefix(2).map(\.name).joined(separator: " + ")
+            return "Uses your \(names) — they expire soon."
         }
-        .foregroundStyle(L.ink)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.white, in: Capsule())
-        .modifier(_HomeSoft())
+        if m.matchPct == 100 {
+            return "You have every ingredient."
+        }
+        return "\(m.recipe.timeMinutes) min · \(m.missingIngredients.count) missing"
+    }
+
+    // MARK: - Use first
+
+    private var useFirstSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("USE THESE FIRST")
+                .font(.mono(11))
+                .tracking(1.2)
+                .foregroundStyle(L.ink.opacity(0.4))
+                .padding(.horizontal, L.S.pad)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(useFirst) { item in
+                        UseFirstChip(item: item)
+                    }
+                }
+                .padding(.horizontal, L.S.pad)
+            }
+        }
+    }
+
+    // MARK: - Expiring banner
+
+    private var expiringBanner: some View {
+        Button { app.selectedTab = .fridge } label: {
+            HStack(spacing: 12) {
+                Circle().fill(L.rose).frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(urgentCount) item\(urgentCount == 1 ? "" : "s") need attention")
+                        .font(.manrope(14, .heavy))
+                        .kerning(-0.2)
+                        .foregroundStyle(L.ink)
+                    Text("Expiring soon — tap to review")
+                        .font(.manrope(12.5, .semibold))
+                        .foregroundStyle(L.ink.opacity(0.55))
+                }
+                Spacer()
+                LSymbol(key: "arrowR", size: 16, weight: .heavy)
+                    .foregroundStyle(L.ink.opacity(0.45))
+            }
+            .padding(16)
+            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .modifier(_HomeCardShadow())
+        .padding(.horizontal, L.S.pad)
+        .tapPress()
     }
 }
 
-private struct DayDot: View {
-    let letter: String
-    let num: Int
-    let selected: Bool
-    let past: Bool
-    let future: Bool
-    let badge: Int
+// MARK: - Featured recipe card
+
+private struct FeaturedRecipeCard: View {
+    let match: RecipeMatch
     let onTap: () -> Void
 
-    private var labelColor: Color {
-        if selected { return L.ink }
-        if past { return L.ink.opacity(0.35) }
-        if future { return L.ink.opacity(0.40) }
-        return L.ink.opacity(0.55)
-    }
-    private var ringColor: Color {
-        selected ? L.ink : L.ink.opacity(0.30)
-    }
+    private var recipe: Recipe { match.recipe }
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .stroke(style: StrokeStyle(lineWidth: selected ? 1.8 : 1.3, lineCap: .round, dash: [4, 3]))
-                        .foregroundStyle(ringColor)
-                        .frame(width: 38, height: 38)
-                    Text(letter)
-                        .font(.manrope(14, selected ? .heavy : .bold))
-                        .kerning(-0.2)
-                        .foregroundStyle(labelColor)
-                    if badge > 0 {
-                        ZStack {
-                            Circle().fill(L.pop)
-                                .overlay(Circle().stroke(L.paper, lineWidth: 2))
-                                .frame(width: 18, height: 18)
-                            Text("\(badge)")
-                                .font(.manrope(10.5, .heavy))
-                                .foregroundStyle(L.cream)
-                        }
-                        .offset(x: 16, y: -16)
+            VStack(spacing: 0) {
+                FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: 200, radius: 0, label: recipe.uses.first)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous).offset(y: 1))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(recipe.title)
+                        .font(.manrope(20, .heavy))
+                        .kerning(-0.5)
+                        .foregroundStyle(L.ink)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    HStack(spacing: 10) {
+                        Label("\(recipe.timeMinutes) min", systemImage: "clock")
+                            .font(.manrope(13, .bold))
+                            .foregroundStyle(L.ink.opacity(0.6))
+                        Text("·").foregroundStyle(L.ink.opacity(0.25))
+                        Text("Uses \(match.recipe.uses.count - match.missingIngredients.count) of yours")
+                            .font(.manrope(13, .bold))
+                            .foregroundStyle(L.ink.opacity(0.6))
                     }
                 }
-                Text("\(num)")
-                    .font(.manrope(14, selected ? .heavy : .semibold))
-                    .kerning(-0.3)
-                    .foregroundStyle(labelColor)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 6)
+            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(.plain)
+        .modifier(_HomeCardShadow())
+        .tapPress()
     }
 }
 
-private struct _HomeSoft: ViewModifier {
-    func body(content: Content) -> some View { L.Shadow.soft(content) }
-}
+// MARK: - Use first chip
 
-// MARK: - Stat carousel
+private struct UseFirstChip: View {
+    let item: FoodItem
 
-private struct StatCarousel: View {
-    @Binding var page: Int
-    let fresh: Int
-    let total: Int
-    let freshPct: Double
-    let today: Int
-    let soon: Int
-    let low: Int
-    let score: Int
-
-    var body: some View {
-        VStack(spacing: 18) {
-            TabView(selection: $page) {
-                StatPage {
-                    HeroCard(big: today, unit: "/ \(max(total, 1))", label: "items need using today", pct: total == 0 ? 0 : Double(today) / Double(total), icon: "leaf", tone: L.mint)
-                }
-                .tag(0)
-
-                StatPage {
-                    HStack(spacing: 10) {
-                        MiniStat(big: today, label: "Expire today", icon: "flame", tone: .rose, pct: today == 0 ? 0 : 1)
-                        MiniStat(big: soon, label: "This week", icon: "clock", tone: .pop, pct: min(1.0, Double(soon) / 6.0))
-                        MiniStat(big: low, label: "Low stock", icon: "box", tone: .sun, pct: low > 0 ? 0.6 : 0)
-                    }
-                }
-                .tag(1)
-
-                StatPage {
-                    ScoreCard(score: score)
-                }
-                .tag(2)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 192)
-
-            HStack(spacing: 7) {
-                ForEach(0..<3) { i in
-                    Circle()
-                        .fill(i == page ? L.ink : L.ink.opacity(0.20))
-                        .frame(width: i == page ? 9 : 7, height: i == page ? 9 : 7)
-                        .animation(.easeInOut(duration: 0.18), value: page)
-                }
-            }
-        }
+    private var label: String {
+        if item.daysLeft <= 0 { return "today" }
+        return "\(item.daysLeft)d left"
     }
-}
-
-private struct StatPage<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-    var body: some View {
-        content()
-            .padding(.horizontal, L.S.pad)
+    private var labelColor: Color {
+        item.daysLeft <= 0 ? L.rose : L.pop
     }
-}
-
-private struct HeroCard: View {
-    let big: Int
-    let unit: String
-    let label: String
-    let pct: Double
-    let icon: String
-    let tone: Color
 
     var body: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(big)")
-                        .font(.manrope(64, .heavy))
-                        .kerning(-3)
-                        .foregroundStyle(L.ink)
-                    Text(unit)
-                        .font(.manrope(18, .bold))
-                        .kerning(-0.5)
-                        .foregroundStyle(L.ink.opacity(0.4))
-                }
+        HStack(spacing: 8) {
+            FoodTile(food: item.foodKey, size: 32, radius: 10)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.name)
+                    .font(.manrope(13, .heavy))
+                    .kerning(-0.2)
+                    .foregroundStyle(L.ink)
+                    .lineLimit(1)
                 Text(label)
-                    .font(.manrope(16, .bold))
-                    .kerning(-0.3)
-                    .foregroundStyle(L.ink)
-                    .multilineTextAlignment(.leading)
-            }
-            Spacer(minLength: 12)
-            Dial(pct: pct, size: 124, stroke: 14, icon: icon, tone: tone)
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 168)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .modifier(_HomeCardShadow())
-    }
-}
-
-private struct MiniStat: View {
-    enum Tone { case rose, pop, sun, mint }
-    let big: Int
-    let label: String
-    let icon: String
-    let tone: Tone
-    let pct: Double
-
-    private var color: Color {
-        switch tone { case .rose: return L.rose; case .pop: return L.pop; case .sun: return L.sun; case .mint: return L.mint }
-    }
-    private var bg: Color {
-        switch tone { case .rose: return L.roseBg; case .pop: return L.popBg; case .sun: return L.sunBg; case .mint: return L.mintBg }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(big)")
-                .font(.manrope(32, .heavy))
-                .kerning(-1.2)
-                .foregroundStyle(L.ink)
-            Text(label)
-                .font(.manrope(12.5, .bold))
-                .kerning(-0.2)
-                .foregroundStyle(L.ink)
-            Spacer()
-            HStack {
-                Spacer()
-                Dial(pct: pct, size: 72, stroke: 8, icon: icon, tone: color, bg: bg, mini: true)
-                Spacer()
+                    .font(.manrope(11, .bold))
+                    .foregroundStyle(labelColor)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 168)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .modifier(_HomeCardShadow())
-    }
-}
-
-private struct ScoreCard: View {
-    @Environment(AppState.self) private var app
-    let score: Int
-
-    var body: some View {
-        let pct = Double(score) / 10.0
-        let barColor: Color = score >= 8 ? L.mint : (score >= 5 ? L.sun : L.rose)
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .lastTextBaseline) {
-                Text("Fridge Score")
-                    .font(.manrope(22, .heavy))
-                    .kerning(-0.6)
-                    .foregroundStyle(L.ink)
-                Spacer()
-                HStack(alignment: .lastTextBaseline, spacing: 2) {
-                    Text("\(score)").font(.manrope(26, .heavy)).kerning(-0.8).foregroundStyle(L.ink)
-                    Text("/10").font(.manrope(16, .bold)).foregroundStyle(L.ink.opacity(0.35))
-                }
-            }
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(L.ink.opacity(0.06))
-                    Capsule().fill(barColor).frame(width: g.size.width * pct)
-                }
-            }
-            .frame(height: 8)
-            Text(rationale)
-                .font(.manrope(13.5, .medium))
-                .lineSpacing(3)
-                .foregroundStyle(L.ink.opacity(0.55))
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .modifier(_HomeCardShadow())
-    }
-
-    private var rationale: String {
-        if app.fridge.total == 0 {
-            return "Empty fridge. Scan it and Levla will start tracking your score."
-        }
-        if app.fridge.todayCount > 0 {
-            return "\(app.fridge.todayCount) item\(app.fridge.todayCount == 1 ? "" : "s") need\(app.fridge.todayCount == 1 ? "s" : "") cooking today — pull up a recipe."
-        }
-        if app.fridge.soonCount > 0 {
-            return "\(app.fridge.soonCount) item\(app.fridge.soonCount == 1 ? "" : "s") turning this week. Cook them soon to keep your score up."
-        }
-        if app.fridge.lowCount > 0 {
-            return "Stock looks fresh but \(app.fridge.lowCount) item\(app.fridge.lowCount == 1 ? "" : "s") running low — top up soon."
-        }
-        return "Well stocked, low waste. Keep cooking with what you have."
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .modifier(_HomeChipShadow())
     }
 }
 
@@ -494,158 +259,6 @@ private struct _HomeCardShadow: ViewModifier {
     func body(content: Content) -> some View { L.Shadow.card(content) }
 }
 
-// MARK: - Recently added card
-
-private struct RecentCard: View {
-    let item: FoodItem
-
-    private var expLabel: String {
-        if item.daysLeft <= 0 { return "Use today" }
-        if item.daysLeft == 1 { return "Eat tomorrow" }
-        return "\(item.daysLeft) days fresh"
-    }
-    private var expColor: Color {
-        if item.daysLeft <= 1 { return L.pop }
-        if item.daysLeft <= 4 { return Color(hex: 0xA07215) }
-        return L.mint
-    }
-    private var whenLabel: String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .short
-        return f.localizedString(for: item.addedAt, relativeTo: Date())
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack(alignment: .topLeading) {
-                FoodTile(food: item.foodKey, size: 100, radius: 16)
-                Text(item.source.rawValue.uppercased())
-                    .font(.manrope(9.5, .heavy))
-                    .tracking(0.4)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(L.cream.opacity(0.92), in: Capsule())
-                    .foregroundStyle(L.ink)
-                    .padding(8)
-            }
-            .frame(width: 100, height: 100)
-
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top) {
-                    Text(item.name)
-                        .font(.manrope(16, .heavy))
-                        .kerning(-0.3)
-                        .foregroundStyle(L.ink)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(whenLabel)
-                        .font(.manrope(11, .bold))
-                        .kerning(-0.1)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(L.ink.opacity(0.04), in: Capsule())
-                        .foregroundStyle(L.ink.opacity(0.55))
-                }
-
-                HStack(spacing: 6) {
-                    LSymbol(key: "box", size: 14, weight: .semibold)
-                    Text(item.qty)
-                }
-                .font(.manrope(13, .semibold))
-                .foregroundStyle(L.ink.opacity(0.55))
-                .padding(.top, 6)
-
-                Spacer()
-
-                HStack(spacing: 6) {
-                    Circle().fill(expColor).frame(width: 6, height: 6)
-                    Text(expLabel)
-                        .font(.manrope(12, .heavy))
-                        .kerning(-0.1)
-                        .foregroundStyle(expColor)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(L.ink.opacity(0.04), in: Capsule())
-            }
-            .padding(.vertical, 4)
-        }
-        .padding(10)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .modifier(_HomeCardShadow())
-    }
-}
-
-private struct EmptyRecentlyAdded: View {
-    @Environment(AppState.self) var app
-    var body: some View {
-        VStack(spacing: 10) {
-            Text("Your fridge is empty.")
-                .font(.manrope(16, .heavy))
-                .foregroundStyle(L.ink)
-            Text("Tap the orange button to scan it in.")
-                .font(.manrope(13, .semibold))
-                .foregroundStyle(L.ink.opacity(0.55))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .modifier(_HomeCardShadow())
-    }
-}
-
-// MARK: - Tracker-style recipe card
-
-struct TrackRecipeCard: View {
-    let match: RecipeMatch
-    private var recipe: Recipe { match.recipe }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            FoodOrb(foods: Array(recipe.uses.prefix(3)), color: recipe.color, accent: recipe.accent, height: 92, radius: 14)
-                .frame(width: 92, height: 92)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(recipe.title)
-                    .font(.manrope(16, .heavy))
-                    .kerning(-0.3)
-                    .foregroundStyle(L.ink)
-                    .lineLimit(1)
-
-                HStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        LSymbol(key: "clock", size: 14, weight: .semibold)
-                        Text("\(recipe.timeMinutes)m")
-                    }
-                    Text("·").foregroundStyle(L.ink.opacity(0.25))
-                    HStack(spacing: 4) {
-                        LSymbol(key: "flame", size: 14, weight: .semibold)
-                        Text("\(recipe.kcal)")
-                    }
-                }
-                .font(.manrope(13, .bold))
-                .foregroundStyle(L.ink.opacity(0.6))
-
-                if match.matchPct == 100 {
-                    LPill(tone: .mint) {
-                        LSymbol(key: "check", size: 13, weight: .heavy)
-                        Text("All in your fridge")
-                    }
-                } else if !match.useSoonIngredients.isEmpty {
-                    LPill(tone: .pop) {
-                        LSymbol(key: "flame", size: 12, weight: .heavy)
-                        Text("Uses \(match.useSoonIngredients.first?.name ?? "soon") today")
-                    }
-                } else {
-                    LPill(tone: .neutral) {
-                        Text("\(match.matchPct)% match · \(match.missingIngredients.count) to buy")
-                    }
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .modifier(_HomeCardShadow())
-    }
+private struct _HomeChipShadow: ViewModifier {
+    func body(content: Content) -> some View { L.Shadow.soft(content) }
 }

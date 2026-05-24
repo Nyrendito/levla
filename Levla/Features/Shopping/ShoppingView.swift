@@ -1,46 +1,59 @@
 import SwiftUI
 
-/// Shopping — progress card, sections of big-checkbox rows. Mirrors V2Shopping.
+/// Shopping — one sentence: "Buy what you're missing or running low on."
+/// Supports the fridge → cook loop. NOT a standalone grocery app.
+///
+/// Three sections, purpose-grouped:
+/// 1. For tonight — auto-added missing ingredients from recipes
+/// 2. Running low — low-stock items from your fridge
+/// 3. Added by you — manual entries
 struct ShoppingView: View {
     @Environment(AppState.self) private var app
     @State private var newItemName = ""
     @State private var addingItem = false
 
-    private var totalItems: Int { app.shopping.items.count }
-    private var checked: Int { app.shopping.items.filter(\.checked).count }
-    private var pct: Double { totalItems == 0 ? 0 : Double(checked) / Double(totalItems) }
-    private var autoCount: Int { app.shopping.items.filter(\.auto).count }
+    // MARK: - Derived groups
+
+    private var forTonightItems: [ShoppingListItem] {
+        app.shopping.items.filter { $0.auto && ($0.forRecipe ?? "").lowercased() != "running low" }
+    }
+    private var runningLowFromShopping: [ShoppingListItem] {
+        app.shopping.items.filter { ($0.forRecipe ?? "").lowercased() == "running low" }
+    }
+    /// Items in fridge marked .low — surfaced even if no shopping_items row exists.
+    private var runningLowFromFridge: [FoodItem] {
+        app.fridge.items.filter { $0.status == .low }
+    }
+    private var addedByYouItems: [ShoppingListItem] {
+        app.shopping.items.filter { !$0.auto }
+    }
+
+    private var totalUnchecked: Int {
+        app.shopping.items.filter { !$0.checked }.count + runningLowFromFridge.count
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                BigHeader(title: "Shopping", sub: "\(autoCount) auto-added") {
-                    HStack(spacing: -10) {
-                        Avatar(name: "Sam", color: L.mint, size: 36)
-                        Avatar(name: "Eva", color: L.pop, size: 36)
+                header.padding(.horizontal, L.S.pad).padding(.top, 60)
+
+                if app.shopping.items.isEmpty && runningLowFromFridge.isEmpty {
+                    emptyState.padding(.top, 28)
+                } else {
+                    if !forTonightItems.isEmpty {
+                        section(title: "FOR TONIGHT", items: forTonightItems, fridgeLows: []).padding(.top, 22)
+                    }
+                    if !runningLowFromShopping.isEmpty || !runningLowFromFridge.isEmpty {
+                        section(title: "RUNNING LOW", items: runningLowFromShopping, fridgeLows: runningLowFromFridge).padding(.top, 22)
+                    }
+                    if !addedByYouItems.isEmpty {
+                        section(title: "ADDED BY YOU", items: addedByYouItems, fridgeLows: []).padding(.top, 22)
                     }
                 }
-                .padding(.horizontal, L.S.pad)
 
-                progressCard
-                    .padding(.horizontal, L.S.pad)
-                    .padding(.top, 18)
+                addItemBar.padding(.horizontal, L.S.pad).padding(.top, 22)
 
-                householdTip
-                    .padding(.horizontal, L.S.pad)
-                    .padding(.top, 16)
-
-                ForEach(app.shopping.grouped(), id: \.section) { group in
-                    sectionView(name: group.section, items: group.items)
-                        .padding(.horizontal, L.S.pad)
-                        .padding(.top, 22)
-                }
-
-                addItemBar
-                    .padding(.horizontal, L.S.pad)
-                    .padding(.top, 22)
-
-                Color.clear.frame(height: 130)
+                Color.clear.frame(height: 140)
             }
         }
         .background(L.paper.ignoresSafeArea())
@@ -51,99 +64,77 @@ struct ShoppingView: View {
         }
     }
 
-    // MARK: - Progress card
+    // MARK: - Header
 
-    private var progressCard: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("SAINSBURY'S RUN · SATURDAY")
-                        .font(.manrope(12, .heavy))
-                        .tracking(0.6)
-                        .foregroundStyle(L.cream.opacity(0.65))
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(checked)")
-                            .font(.manrope(44, .heavy))
-                            .kerning(-1.6)
-                            .foregroundStyle(L.cream)
-                        Text("/ \(totalItems)")
-                            .font(.manrope(18, .bold))
-                            .foregroundStyle(L.cream.opacity(0.55))
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text("EST.")
-                        .font(.manrope(12, .heavy))
-                        .tracking(0.6)
-                        .foregroundStyle(L.cream.opacity(0.65))
-                    Text("£32.40")
-                        .font(.manrope(28, .heavy))
-                        .kerning(-1)
-                        .foregroundStyle(L.cream)
-                }
-            }
-
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(L.cream.opacity(0.12))
-                    Capsule().fill(L.mint).frame(width: g.size.width * pct)
-                }
-            }
-            .frame(height: 7)
-            .padding(.top, 16)
-
-            HStack {
-                Text(pct >= 1 ? "All done — nice." : "\(totalItems - checked) left to grab.")
-                    .font(.manrope(12.5, .semibold))
-                    .foregroundStyle(L.cream.opacity(0.65))
-                Spacer()
-            }
-            .padding(.top, 10)
-        }
-        .padding(22)
-        .background(L.ink, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-    }
-
-    private var householdTip: some View {
-        HStack(spacing: 12) {
-            Circle().fill(L.mint).frame(width: 8, height: 8)
-                .opacity(0.85)
-            Text("Sam is at the shop — checking off live.")
-                .font(.manrope(13.5, .bold))
-                .kerning(-0.1)
-                .foregroundStyle(Color(hex: 0x2C4A1E))
+    private var header: some View {
+        HStack(alignment: .lastTextBaseline) {
+            Text("Shopping")
+                .font(.manrope(34, .heavy))
+                .kerning(-1.1)
+                .foregroundStyle(L.ink)
             Spacer()
+            if totalUnchecked > 0 {
+                Text("\(totalUnchecked) to grab")
+                    .font(.manrope(13, .heavy))
+                    .foregroundStyle(L.ink.opacity(0.45))
+            }
         }
-        .padding(14)
-        .background(L.mintBg, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private func sectionView(name: String, items: [ShoppingListItem]) -> some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .lastTextBaseline) {
-                Text(name)
-                    .font(.manrope(18, .heavy))
-                    .kerning(-0.5)
-                    .foregroundStyle(L.ink)
+    // MARK: - Section
+
+    @ViewBuilder
+    private func section(title: String, items: [ShoppingListItem], fridgeLows: [FoodItem]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.mono(11)).tracking(1.2)
+                    .foregroundStyle(L.ink.opacity(0.4))
                 Spacer()
-                Text("\(items.count)")
+                Text("\(items.count + fridgeLows.count)")
                     .font(.manrope(12, .heavy))
-                    .foregroundStyle(L.ink.opacity(0.5))
+                    .foregroundStyle(L.ink.opacity(0.4))
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, L.S.pad)
 
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { (i, item) in
-                    BigShopRow(item: item, isLast: i == items.count - 1) {
+                    BigShopRow(item: item, isLast: i == items.count - 1 && fridgeLows.isEmpty) {
                         Task { await app.shopping.toggle(item.id) }
                     }
                 }
+                ForEach(Array(fridgeLows.enumerated()), id: \.element.id) { (i, item) in
+                    LowFromFridgeRow(item: item, isLast: i == fridgeLows.count - 1) {
+                        promoteLowToShopping(item)
+                    }
+                }
             }
-            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .modifier(_ShoppingShadow())
+            .padding(.horizontal, L.S.pad)
         }
     }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Text("Nothing on your list.")
+                .font(.manrope(18, .heavy))
+                .foregroundStyle(L.ink)
+            Text("As you cook, missing ingredients land here automatically.")
+                .font(.manrope(13, .semibold))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(L.ink.opacity(0.55))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(28)
+        .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .modifier(_ShoppingShadow())
+        .padding(.horizontal, L.S.pad)
+    }
+
+    // MARK: - Add bar
 
     private var addItemBar: some View {
         VStack(spacing: 10) {
@@ -175,6 +166,8 @@ struct ShoppingView: View {
         }
     }
 
+    // MARK: - Actions
+
     private func addItem() {
         let trimmed = newItemName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, let userId = app.auth.currentUserId else { return }
@@ -187,16 +180,24 @@ struct ShoppingView: View {
         newItemName = ""
         withAnimation { addingItem = false }
     }
+
+    private func promoteLowToShopping(_ item: FoodItem) {
+        guard let userId = app.auth.currentUserId else { return }
+        // Avoid duplicates
+        if app.shopping.items.contains(where: { $0.name.lowercased() == item.name.lowercased() }) {
+            return
+        }
+        let s = ShoppingListItem(
+            id: UUID(), userId: userId,
+            name: item.name, qty: item.qty, section: "Other",
+            auto: true, forRecipe: "Running low", checked: false, inFridge: false, addedBy: nil, createdAt: Date()
+        )
+        Task { await app.shopping.add(s) }
+    }
 }
 
-private struct _ShoppingShadow: ViewModifier {
-    func body(content: Content) -> some View { L.Shadow.card(content) }
-}
-private struct _ShoppingSoft: ViewModifier {
-    func body(content: Content) -> some View { L.Shadow.soft(content) }
-}
+// MARK: - Row variants
 
-/// Shopping row with a HUGE 30pt checkbox.
 struct BigShopRow: View {
     let item: ShoppingListItem
     let isLast: Bool
@@ -207,47 +208,87 @@ struct BigShopRow: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(item.checked ? Color.clear : L.ink.opacity(0.15), lineWidth: 2)
+                        .stroke(item.checked ? Color.clear : L.ink.opacity(0.18), lineWidth: 2)
                     if item.checked {
                         RoundedRectangle(cornerRadius: 10, style: .continuous).fill(L.mint)
                         LSymbol(key: "check", size: 20, weight: .heavy).foregroundStyle(L.cream)
                     }
                 }
-                .frame(width: 30, height: 30)
+                .frame(width: 28, height: 28)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(item.name)
-                            .font(.manrope(16, .bold))
-                            .kerning(-0.3)
-                            .foregroundStyle(item.checked ? L.ink.opacity(0.4) : L.ink)
-                            .strikethrough(item.checked, color: L.ink.opacity(0.4))
-                        if item.auto { AIDot(color: L.mint, size: 5) }
-                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.manrope(15, .bold))
+                        .kerning(-0.2)
+                        .foregroundStyle(item.checked ? L.ink.opacity(0.4) : L.ink)
+                        .strikethrough(item.checked, color: L.ink.opacity(0.4))
                     HStack(spacing: 8) {
                         Text(item.qty)
-                            .font(.manrope(12.5, .semibold))
-                            .foregroundStyle(L.ink.opacity(0.55))
-                        if let r = item.forRecipe {
+                            .font(.manrope(12, .semibold))
+                            .foregroundStyle(L.ink.opacity(0.5))
+                        if let r = item.forRecipe, r.lowercased() != "running low" {
                             Text("· \(r)")
-                                .font(.manrope(12.5, .semibold))
+                                .font(.manrope(12, .semibold))
                                 .foregroundStyle(L.ink.opacity(0.4))
                         }
                     }
                 }
-
                 Spacer()
-
-                if let by = item.addedBy { Avatar(name: by, color: L.mint, size: 26) }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 16)
+            .padding(.vertical, 14)
         }
         .buttonStyle(.plain)
         .overlay(alignment: .bottom) {
             if !isLast {
-                Rectangle().fill(L.ink.opacity(0.07)).frame(height: 0.5).padding(.leading, 58)
+                Rectangle().fill(L.ink.opacity(0.07)).frame(height: 0.5).padding(.leading, 56)
             }
         }
     }
+}
+
+private struct LowFromFridgeRow: View {
+    let item: FoodItem
+    let isLast: Bool
+    let onAdd: () -> Void
+
+    var body: some View {
+        Button(action: onAdd) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(L.sun.opacity(0.18))
+                    LSymbol(key: "plus", size: 16, weight: .heavy)
+                        .foregroundStyle(L.sun)
+                }
+                .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.manrope(15, .bold))
+                        .kerning(-0.2)
+                        .foregroundStyle(L.ink)
+                    Text("Low in your fridge — tap to add")
+                        .font(.manrope(12, .semibold))
+                        .foregroundStyle(L.ink.opacity(0.5))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle().fill(L.ink.opacity(0.07)).frame(height: 0.5).padding(.leading, 56)
+            }
+        }
+    }
+}
+
+private struct _ShoppingShadow: ViewModifier {
+    func body(content: Content) -> some View { L.Shadow.card(content) }
+}
+private struct _ShoppingSoft: ViewModifier {
+    func body(content: Content) -> some View { L.Shadow.soft(content) }
 }
