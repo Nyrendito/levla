@@ -190,10 +190,6 @@ struct RecipeDetailView: View {
     }
 
     private var liveReason: String {
-        if !match.useSoonIngredients.isEmpty {
-            let names = match.useSoonIngredients.prefix(2).map(\.name).joined(separator: " + ")
-            return "Uses your \(names) — they need eating soon."
-        }
         if match.matchPct == 100 {
             return "You have every ingredient — start now."
         }
@@ -260,9 +256,7 @@ struct RecipeDetailView: View {
             }
             Spacer()
             if ing.have {
-                if ing.useSoon {
-                    LPill(tone: .pop) { Text("use today") }
-                } else if ing.low {
+                if ing.low {
                     LPill(tone: .sun) { Text("low") }
                 } else {
                     ZStack {

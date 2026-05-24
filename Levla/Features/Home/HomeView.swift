@@ -1,15 +1,19 @@
 import SwiftUI
 
 /// Home — a decision assistant, not a dashboard.
-/// Answers ONE question: "What should I cook before my food goes bad?"
+/// One question: "What should I cook with what I have?"
 ///
-/// Structure (top to bottom):
+/// Top to bottom:
 /// 1. Levla wordmark
-/// 2. "Tonight — cook X" hero (the top-ranked recipe)
-/// 3. Optional featured recipe card
-/// 4. "Use these first" — up to 3 urgent items, as chips
+/// 2. "Tonight — cook X" hero (top-ranked recipe)
+/// 3. Featured recipe card
+/// 4. "Recently added" — last 3 things scanned in
 /// 5. Big Scan fridge CTA
-/// 6. Optional Expiring soon banner (only when something's urgent)
+///
+/// Deliberately removed: expiry chips, "use today / 2d left" pills,
+/// "expiring soon" banner, "use first" section, freshness tracker dials.
+/// We can't reliably infer time-based expiry from a fridge photo, so we
+/// don't pretend to.
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var openedRecipe: Recipe?
@@ -18,16 +22,6 @@ struct HomeView: View {
         RecipeMatcher.rank(recipes: app.recipes.recipes, fridge: app.fridge.items)
     }
     private var topRecipe: RecipeMatch? { matches.first }
-
-    private var useFirst: [FoodItem] {
-        app.fridge.items
-            .filter { $0.status == .today || $0.status == .soon }
-            .sorted(by: { $0.daysLeft < $1.daysLeft })
-            .prefix(3)
-            .map { $0 }
-    }
-
-    private var urgentCount: Int { useFirst.count }
 
     private var recentlyAdded: [FoodItem] {
         Array(
@@ -47,10 +41,6 @@ struct HomeView: View {
                         .padding(.horizontal, L.S.pad)
                         .padding(.top, 14)
                 }
-                if !useFirst.isEmpty {
-                    useFirstSection
-                        .padding(.top, 28)
-                }
                 if !recentlyAdded.isEmpty {
                     recentlyAddedSection
                         .padding(.top, 28)
@@ -60,10 +50,6 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, L.S.pad)
                 .padding(.top, 28)
-
-                if urgentCount > 0 {
-                    expiringBanner.padding(.top, 14)
-                }
 
                 Color.clear.frame(height: 140)
             }
@@ -132,35 +118,11 @@ struct HomeView: View {
     }
 
     private func reasonLine(for m: RecipeMatch) -> String {
-        if !m.useSoonIngredients.isEmpty {
-            let names = m.useSoonIngredients.prefix(2).map(\.name).joined(separator: " + ")
-            return "Uses your \(names) — they expire soon."
-        }
         if m.matchPct == 100 {
             return "You have every ingredient."
         }
-        return "\(m.recipe.timeMinutes) min · \(m.missingIngredients.count) missing"
-    }
-
-    // MARK: - Use first
-
-    private var useFirstSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("USE THESE FIRST")
-                .font(.mono(11))
-                .tracking(1.2)
-                .foregroundStyle(L.ink.opacity(0.4))
-                .padding(.horizontal, L.S.pad)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(useFirst) { item in
-                        UseFirstChip(item: item)
-                    }
-                }
-                .padding(.horizontal, L.S.pad)
-            }
-        }
+        let have = m.recipe.ingredients.count - m.missingIngredients.count
+        return "\(m.recipe.timeMinutes) min · \(have) of \(m.recipe.ingredients.count) in your fridge"
     }
 
     // MARK: - Recently added
@@ -190,34 +152,6 @@ struct HomeView: View {
             .modifier(_HomeCardShadow())
             .padding(.horizontal, L.S.pad)
         }
-    }
-
-    // MARK: - Expiring banner
-
-    private var expiringBanner: some View {
-        Button { app.selectedTab = .fridge } label: {
-            HStack(spacing: 12) {
-                Circle().fill(L.rose).frame(width: 8, height: 8)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(urgentCount) item\(urgentCount == 1 ? "" : "s") need attention")
-                        .font(.manrope(14, .heavy))
-                        .kerning(-0.2)
-                        .foregroundStyle(L.ink)
-                    Text("Expiring soon — tap to review")
-                        .font(.manrope(12.5, .semibold))
-                        .foregroundStyle(L.ink.opacity(0.55))
-                }
-                Spacer()
-                LSymbol(key: "arrowR", size: 16, weight: .heavy)
-                    .foregroundStyle(L.ink.opacity(0.45))
-            }
-            .padding(16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .modifier(_HomeCardShadow())
-        .padding(.horizontal, L.S.pad)
-        .tapPress()
     }
 }
 
@@ -263,38 +197,7 @@ private struct FeaturedRecipeCard: View {
     }
 }
 
-// MARK: - Use first chip
-
-private struct UseFirstChip: View {
-    let item: FoodItem
-
-    private var label: String {
-        if item.daysLeft <= 0 { return "today" }
-        return "\(item.daysLeft)d left"
-    }
-    private var labelColor: Color {
-        item.daysLeft <= 0 ? L.rose : L.pop
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            FoodTile(food: item.foodKey, size: 32, radius: 10)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.name)
-                    .font(.manrope(13, .heavy))
-                    .kerning(-0.2)
-                    .foregroundStyle(L.ink)
-                    .lineLimit(1)
-                Text(label)
-                    .font(.manrope(11, .bold))
-                    .foregroundStyle(labelColor)
-            }
-        }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .modifier(_HomeChipShadow())
-    }
-}
+// MARK: - Recently-added row
 
 private struct RecentRow: View {
     let item: FoodItem
@@ -304,17 +207,6 @@ private struct RecentRow: View {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .short
         return f.localizedString(for: item.addedAt, relativeTo: Date())
-    }
-
-    private var expLabel: String {
-        if item.daysLeft <= 0 { return "today" }
-        if item.daysLeft == 1 { return "tomorrow" }
-        return "\(item.daysLeft)d fresh"
-    }
-    private var expColor: Color {
-        if item.daysLeft <= 0 { return L.rose }
-        if item.daysLeft <= 3 { return L.pop }
-        return L.ink.opacity(0.5)
     }
 
     var body: some View {
@@ -335,9 +227,13 @@ private struct RecentRow: View {
                 .foregroundStyle(L.ink.opacity(0.55))
             }
             Spacer()
-            Text(expLabel)
-                .font(.manrope(12, .heavy))
-                .foregroundStyle(expColor)
+            if item.status == .low {
+                Text("low")
+                    .font(.manrope(11, .heavy))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(L.sun, in: Capsule())
+                    .foregroundStyle(L.cream)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -351,8 +247,4 @@ private struct RecentRow: View {
 
 private struct _HomeCardShadow: ViewModifier {
     func body(content: Content) -> some View { L.Shadow.card(content) }
-}
-
-private struct _HomeChipShadow: ViewModifier {
-    func body(content: Content) -> some View { L.Shadow.soft(content) }
 }

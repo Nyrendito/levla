@@ -19,17 +19,11 @@ struct FridgeView: View {
         return app.fridge.items.filter { $0.name.lowercased().contains(needle) }
     }
 
-    private var useFirst: [FoodItem] {
-        allFiltered
-            .filter { $0.status == .today || $0.status == .soon || $0.status == .low }
-            .sorted(by: byUrgency)
-    }
-
     private var groupedByCategory: [(FoodCategory, [FoodItem])] {
         let dict = Dictionary(grouping: allFiltered, by: \.category)
         return FoodCategory.allCases.compactMap { cat in
             guard let arr = dict[cat], !arr.isEmpty else { return nil }
-            return (cat, arr.sorted(by: byUrgency))
+            return (cat, arr.sorted { $0.name < $1.name })
         }
     }
 
@@ -43,10 +37,6 @@ struct FridgeView: View {
                 }
                 .padding(.horizontal, L.S.pad)
                 .padding(.top, 14)
-
-                if !useFirst.isEmpty {
-                    useFirstSection.padding(.top, 26)
-                }
 
                 allItemsSection.padding(.top, 26)
 
@@ -101,32 +91,6 @@ struct FridgeView: View {
     }
 
     @ViewBuilder
-    private var useFirstSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("USE FIRST")
-                    .font(.mono(11)).tracking(1.2)
-                    .foregroundStyle(L.ink.opacity(0.4))
-                Spacer()
-                Text("\(useFirst.count)")
-                    .font(.manrope(12, .heavy))
-                    .foregroundStyle(L.ink.opacity(0.4))
-            }
-            .padding(.horizontal, L.S.pad)
-
-            VStack(spacing: 8) {
-                ForEach(useFirst) { item in
-                    BigFoodPill(
-                        food: item.foodKey, name: item.name, qty: item.qty,
-                        status: item.status, days: item.daysLeft
-                    )
-                }
-            }
-            .padding(.horizontal, L.S.pad)
-        }
-    }
-
-    @ViewBuilder
     private var allItemsSection: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
@@ -154,7 +118,7 @@ struct FridgeView: View {
                             ForEach(items) { item in
                                 BigFoodPill(
                                     food: item.foodKey, name: item.name, qty: item.qty,
-                                    status: item.status, days: item.daysLeft
+                                    status: item.status
                                 )
                             }
                         }
@@ -181,13 +145,6 @@ struct FridgeView: View {
         .padding(.horizontal, L.S.pad)
     }
 
-    private func byUrgency(_ a: FoodItem, _ b: FoodItem) -> Bool {
-        let order: [FreshnessStatus: Int] = [.today: 0, .soon: 1, .low: 2, .fresh: 3]
-        let ao = order[a.status] ?? 4
-        let bo = order[b.status] ?? 4
-        if ao != bo { return ao < bo }
-        return a.daysLeft < b.daysLeft
-    }
 }
 
 private struct _FridgeSoft: ViewModifier {

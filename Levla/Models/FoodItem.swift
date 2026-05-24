@@ -47,11 +47,12 @@ struct FoodItem: Identifiable, Codable, Hashable, Sendable {
         case isLow = "is_low"
     }
 
+    /// Only two statuses surface in the UI: low (running out) or fresh
+    /// (everything else). We deliberately don't expose time-based "expires
+    /// in N days" buckets because we can't reliably infer them from a single
+    /// fridge photo — best not to lie to the user.
     var status: FreshnessStatus {
-        if isLow { return .low }
-        if daysLeft <= 0 { return .today }
-        if daysLeft <= 3 { return .soon }
-        return .fresh
+        isLow ? .low : .fresh
     }
 
     init(

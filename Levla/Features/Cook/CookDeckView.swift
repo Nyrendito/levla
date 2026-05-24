@@ -198,8 +198,14 @@ private struct SwipeCard: View {
     private var upOpacity:  Double { Double(min(1, max(0, -dragY / 80))) }
 
     var body: some View {
+        GeometryReader { proxy in
+            cardContent(size: proxy.size)
+        }
+    }
+
+    private func cardContent(size: CGSize) -> some View {
         ZStack {
-            FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: 1000, radius: L.R.xxl)
+            FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: size.height, radius: L.R.xxl)
             LinearGradient(
                 colors: [.clear, Color(hex: 0x140F0A).opacity(0.30), Color(hex: 0x140F0A).opacity(0.78)],
                 startPoint: .top, endPoint: .bottom
@@ -288,6 +294,7 @@ private struct SwipeCard: View {
             stamp("SAVE", color: L.mint, rotate: 12, opacity: yesOpacity, alignment: .topTrailing, offset: .init(width: -24, height: 36))
             stamp("COOK NOW", color: L.ink, rotate: 0, opacity: upOpacity, alignment: .top, offset: .init(width: 0, height: 36), bg: L.cream.opacity(0.85))
         }
+        .frame(width: size.width, height: size.height)
         .clipShape(RoundedRectangle(cornerRadius: L.R.xxl, style: .continuous))
         .shadow(color: L.ink.opacity(0.18), radius: 30, x: 0, y: 14)
     }

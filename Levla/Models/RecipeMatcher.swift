@@ -36,17 +36,13 @@ struct RecipeMatch: Identifiable, Hashable {
 }
 
 enum RecipeMatcher {
-    /// Recompute everything a Recipe says about availability from the user's
-    /// current fridge.
+    /// Recompute availability from the user's current fridge.
+    /// We deliberately don't infer "expires soon" — we can't know from a
+    /// scan, so only `have` / `low` / `toBuy` are surfaced.
     static func match(recipe: Recipe, fridge: [FoodItem]) -> RecipeMatch {
         let fridgeKeys = Set(fridge.map(\.foodKey))
-        let soonKeys: Set<String> = Set(
-            fridge.filter { $0.status == .today || $0.status == .soon }.map(\.foodKey)
-        )
         let lowKeys: Set<String> = Set(fridge.filter { $0.status == .low }.map(\.foodKey))
 
-        // Source of truth for "what does this recipe need?" is recipe.ingredients
-        // (more granular than recipe.uses, which is just a tag list for art).
         let neededKeys = recipe.ingredients.isEmpty
             ? recipe.uses
             : recipe.ingredients.map(\.foodKey)
@@ -55,8 +51,6 @@ enum RecipeMatcher {
         for key in neededKeys {
             if !fridgeKeys.contains(key) {
                 stateByKey[key] = .toBuy
-            } else if soonKeys.contains(key) {
-                stateByKey[key] = .useSoon
             } else if lowKeys.contains(key) {
                 stateByKey[key] = .low
             } else {
@@ -69,28 +63,23 @@ enum RecipeMatcher {
         let pct = Int((Double(haveCount) / Double(total) * 100).rounded())
 
         let missing = recipe.ingredients.filter { stateByKey[$0.foodKey] == .toBuy }
-        let useSoon = recipe.ingredients.filter { stateByKey[$0.foodKey] == .useSoon }
 
         return RecipeMatch(
             recipe: recipe,
             matchPct: pct,
             missingIngredients: missing,
-            useSoonIngredients: useSoon,
+            useSoonIngredients: [],     // we don't track expiry
             stateByKey: stateByKey
         )
     }
 
     /// Sort recipes by how cook-able they are right now.
     /// 1. Higher matchPct first
-    /// 2. Ties broken by "uses something expiring soon" (urgency)
-    /// 3. Then by shorter cook time
+    /// 2. Shorter cook time as tiebreaker
     static func rank(recipes: [Recipe], fridge: [FoodItem]) -> [RecipeMatch] {
         let matches = recipes.map { match(recipe: $0, fridge: fridge) }
         return matches.sorted { a, b in
             if a.matchPct != b.matchPct { return a.matchPct > b.matchPct }
-            if a.useSoonIngredients.count != b.useSoonIngredients.count {
-                return a.useSoonIngredients.count > b.useSoonIngredients.count
-            }
             return a.recipe.timeMinutes < b.recipe.timeMinutes
         }
     }
