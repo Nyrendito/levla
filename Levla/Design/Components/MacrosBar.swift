@@ -73,8 +73,13 @@ struct MacrosCarousel: View {
             CaloriesHeroCard(kcal: kcal, goal: kcalGoal)
 
             HStack(spacing: 10) {
+                // `drumstick.fill` doesn't exist in SF Symbols, which is
+                // why the protein card was rendering with no icon at all.
+                // `dumbbell.fill` (iOS 17+) reads as "strength/protein"
+                // and looks balanced against the leaf + drop icons next
+                // to it.
                 MicroCard(label: "Protein", value: protein, goal: proteinGoal,
-                          unit: "g", color: L.macroProtein, icon: "drumstick.fill", iconAsset: "🍗")
+                          unit: "g", color: L.macroProtein, icon: "dumbbell.fill", iconAsset: "💪")
                 MicroCard(label: "Carbs",   value: carbs,   goal: carbsGoal,
                           unit: "g", color: L.macroCarbs, icon: "leaf.fill", iconAsset: "🌾")
                 MicroCard(label: "Fat",     value: fat,     goal: fatGoal,

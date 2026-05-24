@@ -1,21 +1,27 @@
-// supabase/functions/scan-fridge v10 — video-first fridge vision via
-// Gemini 2.5 Flash's native video API.
+// supabase/functions/scan-fridge v11 — storage-backed video upload
+// pipeline + Gemini 2.5 Flash native video understanding.
 //
-// The user records a short (4-8 s) fridge sweep on iOS. We receive the
-// clip as inline base64 data and send ONE multimodal request to Gemini
-// with a strict JSON responseSchema. Gemini samples the clip at ~1 fps
-// internally and preserves motion continuity across the frames — much
-// better signal than the old GPT-4o multi-image grid for a fraction of
-// the token cost.
+// Why storage and not inline base64:
+//   A 20 s 720p H.264 clip is ~5 MB raw, ~7 MB base64. Supabase Edge
+//   Functions historically reject inline bodies near that size (502 from
+//   the gateway, no function logs). Uploading to a private 'fridge-clips'
+//   bucket from iOS, then having this function download via service-role
+//   creds, sidesteps the limit AND keeps the iOS request tiny.
 //
-// Body (preferred): { video: "data:video/mp4;base64,..." }
-// Body (fallback):  { images: ["data:image/jpeg;base64,...", ...] }
-// Returns: { items: [{ name, foodKey, qty, category, daysLeft, confidence }] }
+// Body shapes accepted (preferred first):
+//   { videoPath: "<userId>/<uuid>.mp4" }   — path inside the fridge-clips bucket
+//   { video:     "data:video/mp4;base64,..." } — legacy inline path, still works
+//   { images:   ["data:image/jpeg;base64,...", ...] } — fallback for sim/offline
+//
+// Returns:
+//   { items: [{ name, foodKey, qty, category, daysLeft, confidence }] }
 
 import { corsHeaders, json } from "./_shared/cors.ts";
 import { FOOD_KEYS, CATEGORIES, itemsSchema, strictSchema } from "./_shared/schemas.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.0";
 
 const GEMINI_MODEL = "gemini-2.5-flash";
+const BUCKET = "fridge-clips";
 
 const FRIDGE_INSTRUCTIONS = `You are Levla's fridge vision model. The user has just recorded a short clip while sweeping their fridge (or you'll receive multiple still photos of the shelves). Your job is to identify EVERY distinct food item visible across the clip / images.
 
@@ -27,13 +33,8 @@ For each item return:
 - confidence: 0.0-1.0 based on how clearly you can see the item.
 - name: short human-readable name.
 
-Combine the SAME item seen from different angles into one row (a yoghurt seen on two shelves is one item). Skip empty shelves, drawer dividers, and non-food (jars of pickles, sauces, drinks count as food; a paper towel does not).
+Combine the SAME item seen from different angles into one row. Skip non-food. If you see nothing food-related, return {"items": []}.`;
 
-If you see nothing food-related, return {"items": []}.`;
-
-// Gemini's structured-output schema syntax is OpenAPI 3 with uppercase
-// type strings. We mirror our existing FOOD_KEYS + CATEGORIES enums so
-// the iOS-side ScanCandidate decoder needs no changes.
 const GEMINI_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -57,18 +58,24 @@ const GEMINI_SCHEMA = {
   required: ["items"],
 };
 
-/// Strip a data URI prefix and return the raw base64 plus the MIME type.
 function splitDataUri(uri: string, defaultMime: string): { mime: string; base64: string } {
   const m = /^data:([^;]+);base64,(.+)$/.exec(uri);
   if (m) return { mime: m[1], base64: m[2] };
   return { mime: defaultMime, base64: uri };
 }
 
-/// Gemini path — ONE call with the video clip + strict JSON schema.
-async function scanViaGemini(videoUri: string, gemKey: string): Promise<Response> {
-  const { mime, base64 } = splitDataUri(videoUri, "video/mp4");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${gemKey}`;
+/// Encode raw bytes to base64.
+function toBase64(bytes: Uint8Array): string {
+  let s = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+  }
+  return btoa(s);
+}
 
+async function callGemini(base64: string, mime: string, gemKey: string): Promise<Response> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${gemKey}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -80,13 +87,9 @@ async function scanViaGemini(videoUri: string, gemKey: string): Promise<Response
         ],
       }],
       generationConfig: {
-        // Force strict JSON — Gemini validates against the schema before
-        // returning, so we don't need permissive parsing on the client.
         responseMimeType: "application/json",
         responseSchema: GEMINI_SCHEMA,
         temperature: 0.2,
-        // Low resolution roughly thirds token cost on video with
-        // negligible quality loss on grocery item identification.
         mediaResolution: "MEDIA_RESOLUTION_LOW",
       },
     }),
@@ -94,22 +97,50 @@ async function scanViaGemini(videoUri: string, gemKey: string): Promise<Response
 
   if (!res.ok) {
     const detail = await res.text();
-    return json({ error: "gemini_failed", detail: detail.slice(0, 400) }, { status: 502 });
+    console.error("gemini_failed", res.status, detail.slice(0, 600));
+    return json({
+      error: "gemini_failed",
+      status: res.status,
+      detail: detail.slice(0, 600),
+    }, { status: 502 });
   }
 
   const data = await res.json();
-  // Gemini returns the JSON text in candidates[0].content.parts[0].text.
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
   let parsed: { items?: unknown } = {};
   try { parsed = JSON.parse(text); }
-  catch { return json({ error: "gemini_invalid_json", raw: text.slice(0, 400) }, { status: 502 }); }
-
+  catch {
+    console.error("gemini_invalid_json", text.slice(0, 400));
+    return json({ error: "gemini_invalid_json", raw: text.slice(0, 400) }, { status: 502 });
+  }
   return json({ items: Array.isArray(parsed.items) ? parsed.items : [] });
 }
 
-/// Fallback OpenAI path — unchanged from the old function. Used when the
-/// client falls back to sending images (offline / simulator) instead of a
-/// real video clip.
+async function scanViaStorage(videoPath: string, supabaseUrl: string, serviceKey: string, gemKey: string): Promise<Response> {
+  const admin = createClient(supabaseUrl, serviceKey);
+  const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(videoPath);
+  if (dlErr || !blob) {
+    console.error("storage_download_failed", dlErr?.message ?? "no blob");
+    return json({ error: "storage_download_failed", detail: dlErr?.message ?? "empty" }, { status: 502 });
+  }
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  console.log("scan-fridge storage download ok bytes=", buf.length);
+  const mime = blob.type && blob.type.length > 0 ? blob.type : "video/mp4";
+  const base64 = toBase64(buf);
+
+  const result = await callGemini(base64, mime, gemKey);
+  admin.storage.from(BUCKET).remove([videoPath]).catch((e) => {
+    console.warn("cleanup_failed", videoPath, String(e));
+  });
+  return result;
+}
+
+async function scanViaInline(videoUri: string, gemKey: string): Promise<Response> {
+  const { mime, base64 } = splitDataUri(videoUri, "video/mp4");
+  console.log("scan-fridge inline mime=", mime, " base64Len=", base64.length);
+  return await callGemini(base64, mime, gemKey);
+}
+
 async function scanViaOpenAI(images: string[], apiKey: string): Promise<Response> {
   const content: Array<Record<string, unknown>> = [
     { type: "text", text: FRIDGE_INSTRUCTIONS },
@@ -119,7 +150,6 @@ async function scanViaOpenAI(images: string[], apiKey: string): Promise<Response
     const u = raw.startsWith("data:") ? raw : `data:image/jpeg;base64,${raw}`;
     content.push({ type: "image_url", image_url: { url: u, detail: "high" } });
   }
-
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -130,9 +160,9 @@ async function scanViaOpenAI(images: string[], apiKey: string): Promise<Response
       messages: [{ role: "user", content }],
     }),
   });
-
   if (!res.ok) {
     const text = await res.text();
+    console.error("openai_failed", res.status, text.slice(0, 400));
     return json({ error: "openai_failed", detail: text.slice(0, 400) }, { status: 502 });
   }
   const completion = await res.json();
@@ -147,23 +177,30 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const body = await req.json();
+    const gemKey      = Deno.env.get("GEMINI_API_KEY");
+    const openaiKey   = Deno.env.get("OPENAI_API_KEY");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-    // Video-first: preferred path when iOS records a real clip.
+    if (typeof body?.videoPath === "string" && body.videoPath.length > 0) {
+      if (!gemKey)      return json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
+      if (!supabaseUrl || !serviceKey) return json({ error: "no_supabase_admin" }, { status: 500 });
+      return await scanViaStorage(body.videoPath, supabaseUrl, serviceKey, gemKey);
+    }
+
     if (typeof body?.video === "string" && body.video.length > 0) {
-      const gemKey = Deno.env.get("GEMINI_API_KEY");
       if (!gemKey) return json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
-      return await scanViaGemini(body.video, gemKey);
+      return await scanViaInline(body.video, gemKey);
     }
 
-    // Multi-image fallback (simulator / older clients).
     if (Array.isArray(body?.images) && body.images.length > 0) {
-      const apiKey = Deno.env.get("OPENAI_API_KEY");
-      if (!apiKey) return json({ error: "OPENAI_API_KEY not set" }, { status: 500 });
-      return await scanViaOpenAI(body.images as string[], apiKey);
+      if (!openaiKey) return json({ error: "OPENAI_API_KEY not set" }, { status: 500 });
+      return await scanViaOpenAI(body.images as string[], openaiKey);
     }
 
-    return json({ error: "video or images required" }, { status: 400 });
+    return json({ error: "videoPath, video, or images required" }, { status: 400 });
   } catch (e) {
+    console.error("scan-fridge unhandled", String(e));
     return json({ error: String(e) }, { status: 500 });
   }
 });

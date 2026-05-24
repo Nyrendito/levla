@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import UIKit
+import Functions
 
 /// Full-screen unified scan flow — Cal-AI-style mode switcher at the bottom
 /// lets the user swap between four ways to add fridge items without backing
@@ -161,11 +162,9 @@ struct ScanFlowView: View {
 
     // MARK: - AI dispatchers
 
-    /// Primary path: one short video clip → Gemini 2.5 Flash native video.
-    /// Replaces the older multi-image grid → GPT-4o-mini pipeline.
     private func runFridgeVideoAI(_ videoData: Data) {
         guard !videoData.isEmpty else {
-            phase = .error("No clip captured — try recording again.")
+            phase = .error("Couldn't record a clip — try again.")
             return
         }
         phase = .identifying
@@ -175,16 +174,14 @@ struct ScanFlowView: View {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 phase = .verify
             } catch {
-                phase = .error(error.localizedDescription)
+                phase = .error(humanError(from: error))
             }
         }
     }
 
-    /// Legacy multi-image dispatcher. Kept for the library-picker path and
-    /// for the offline / simulator fallback where we can't record video.
     private func runFridgeAI(_ images: [UIImage]) {
         guard !images.isEmpty else {
-            phase = .error("No frames captured — try recording again.")
+            phase = .error("Couldn't capture a frame — try again.")
             return
         }
         phase = .identifying
@@ -194,9 +191,34 @@ struct ScanFlowView: View {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 phase = .verify
             } catch {
-                phase = .error(error.localizedDescription)
+                phase = .error(humanError(from: error))
             }
         }
+    }
+
+    /// Pull the most useful message we can out of a Supabase function error.
+    /// The default `localizedDescription` for a non-2xx body is "Edge Function
+    /// returned a non-2xx status code", which is useless for debugging.
+    /// We try to decode the JSON body's `error` / `detail` fields and surface
+    /// those (truncated) so QA / TestFlight users see something actionable.
+    private func humanError(from error: Error) -> String {
+        if let fe = error as? FunctionsError {
+            switch fe {
+            case .httpError(let code, let data):
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let errCode = (json["error"] as? String) ?? "request_failed"
+                    let detail  = (json["detail"] as? String) ?? (json["raw"] as? String) ?? ""
+                    if !detail.isEmpty {
+                        return "Scan failed (\(errCode), HTTP \(code)). \(detail.prefix(160))"
+                    }
+                    return "Scan failed (\(errCode), HTTP \(code))."
+                }
+                return "Scan failed — HTTP \(code). Try again."
+            default:
+                break
+            }
+        }
+        return error.localizedDescription
     }
 
     private func runReceiptAI(_ image: UIImage) {
@@ -641,9 +663,9 @@ private struct IdentifyingStage: View {
 
                 HStack(spacing: 8) {
                     ProgressView().tint(L.cream.opacity(0.6))
-                    Text(kind == .receipt ? "Apple Vision → GPT-4.1-mini" :
-                         kind == .fridge ? "GPT-4o is looking at your fridge" :
-                                           "Open Food Facts")
+                    Text(kind == .receipt ? "Reading items off your receipt…" :
+                         kind == .fridge ? "Levla is identifying your items…" :
+                                           "Looking up the product…")
                         .font(.manrope(13, .bold))
                         .foregroundStyle(L.cream.opacity(0.6))
                 }
@@ -692,9 +714,9 @@ private struct VerifyStage: View {
                         }
                         HStack(spacing: 8) {
                             AIDot(color: L.mint, size: 7)
-                            Text(kind == .receipt ? "Receipt parsed by GPT-4.1-mini" :
-                                 kind == .fridge ? "Fridge analyzed by GPT-4o" :
-                                                   "Matched from Open Food Facts")
+                            Text(kind == .receipt ? "Parsed from your receipt" :
+                                 kind == .fridge ? "Identified from your fridge" :
+                                                   "Matched product")
                                 .font(.manrope(13, .semibold))
                                 .foregroundStyle(L.ink.opacity(0.55))
                         }

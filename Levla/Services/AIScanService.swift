@@ -12,26 +12,54 @@ final class AIScanService {
 
     // MARK: - Public API
 
-    /// Send a short fridge sweep clip to Gemini 2.5 Flash via the
-    /// `scan-fridge` Edge Function. Returns parsed candidates ready for the
-    /// verify list. This is the primary entry point for the iOS device path.
+    /// Send a short fridge sweep clip to the scan-fridge Edge Function.
     ///
-    /// One inline base64 video is a fraction of the token cost (and a much
-    /// better signal — the model sees motion + context, not isolated stills)
-    /// compared to the older `scanFridge(images:)` photo-grid path.
+    /// Pipeline:
+    /// 1. Upload the .mp4 to the private `fridge-clips` Storage bucket
+    ///    under the user's folder. This stays off the request body so
+    ///    we're never bottlenecked by the ~6 MB inline limit.
+    /// 2. Send only the storage path to the function.
+    /// 3. The function downloads via service-role creds, hands the bytes
+    ///    to Gemini 2.5 Flash with a strict JSON responseSchema, and
+    ///    auto-deletes the clip after.
+    ///
+    /// Returns the parsed candidates ready for the verify list.
     func scanFridge(videoData: Data) async throws -> [ScanCandidate] {
         guard !videoData.isEmpty else { return [] }
         guard let client = supabase.client else { return [] }
         try await requireSession(client: client)
 
-        let payload = FridgeVideoRequest(
-            video: "data:video/mp4;base64,\(videoData.base64EncodedString())"
-        )
-        let decoded: ScanItemsResponse = try await client.functions.invoke(
-            "scan-fridge",
-            options: .init(body: payload)
-        )
-        return decoded.items.map { $0.toCandidate() }
+        // The RLS policy on fridge-clips requires the first folder segment
+        // to be the auth.uid() — so we MUST scope the path by current uid.
+        let session = try await client.auth.session
+        let uid = session.user.id.uuidString.lowercased()
+        let path = "\(uid)/\(UUID().uuidString).mp4"
+
+        do {
+            // Try the storage-backed path first. Most robust.
+            _ = try await client.storage
+                .from("fridge-clips")
+                .upload(path, data: videoData, options: FileOptions(contentType: "video/mp4", upsert: true))
+
+            let payload = FridgePathRequest(videoPath: path)
+            let decoded: ScanItemsResponse = try await client.functions.invoke(
+                "scan-fridge",
+                options: .init(body: payload)
+            )
+            return decoded.items.map { $0.toCandidate() }
+        } catch {
+            // Storage upload itself failed — fall through to the inline
+            // path so the user isn't blocked by a flaky storage round-trip.
+            // (Function v11 still accepts a base64 `video` field.)
+            let payload = FridgeVideoRequest(
+                video: "data:video/mp4;base64,\(videoData.base64EncodedString())"
+            )
+            let decoded: ScanItemsResponse = try await client.functions.invoke(
+                "scan-fridge",
+                options: .init(body: payload)
+            )
+            return decoded.items.map { $0.toCandidate() }
+        }
     }
 
     /// Legacy multi-image path. Kept around as a fallback for offline /
@@ -133,6 +161,10 @@ final class AIScanService {
     private struct FridgeScanRequest: Encodable { let images: [String] }
     /// Video-first scan payload. `video` is a `data:video/mp4;base64,…` URI.
     private struct FridgeVideoRequest: Encodable { let video: String }
+    /// Storage-path scan payload. `videoPath` is the key inside the
+    /// `fridge-clips` bucket (e.g. "<uid>/<uuid>.mp4"). Function downloads
+    /// the bytes server-side and hands them to Gemini.
+    private struct FridgePathRequest: Encodable { let videoPath: String }
     private struct ReceiptScanRequest: Encodable { let text: String }
     private struct BarcodeRequest: Encodable { let code: String }
 
