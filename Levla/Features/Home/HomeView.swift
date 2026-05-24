@@ -59,12 +59,18 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 brandRow
 
-                // Macros card up top — Cal-AI-style daily totals.
+                // Macros card up top — Cal-AI-style daily totals against
+                // the user's personalized goals (Mifflin-St Jeor + activity
+                // + goal-adjusted kcal, with macro splits derived from it).
                 MacrosBar(
-                    kcal:    app.cooked.todayKcal,
-                    protein: app.cooked.todayProtein,
-                    carbs:   app.cooked.todayCarbs,
-                    fat:     app.cooked.todayFat
+                    kcal:        app.cooked.todayKcal,
+                    protein:     app.cooked.todayProtein,
+                    carbs:       app.cooked.todayCarbs,
+                    fat:         app.cooked.todayFat,
+                    kcalGoal:    app.currentProfile?.dailyKcalGoal,
+                    proteinGoal: app.currentProfile?.dailyProteinGoal,
+                    carbsGoal:   app.currentProfile?.dailyCarbsGoal,
+                    fatGoal:     app.currentProfile?.dailyFatGoal
                 )
                 .padding(.horizontal, L.S.pad)
                 .padding(.top, 22)
