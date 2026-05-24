@@ -20,7 +20,7 @@ struct RecipeDetailView: View {
         ZStack(alignment: .bottom) {
             ScrollView {
                 ZStack(alignment: .top) {
-                    FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: 360, radius: 0)
+                    FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: 360, radius: 0, recipe: recipe)
                     HStack {
                         BigIconBtn(icon: "chevronL", tone: .light, action: onClose)
                         Spacer()

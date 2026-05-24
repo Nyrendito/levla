@@ -44,10 +44,20 @@ final class ImageCacheService {
         let payload = GenRequest(kind: kind.rawValue, key: key, title: title, uses: uses)
 
         do {
-            let data: Data = try await client.functions.invoke(
+            // The closure-based invoke returns raw bytes. The shorter
+            // `let data: Data = try await client.functions.invoke(...)`
+            // form makes the SDK JSON-decode INTO Data, which expects a
+            // base64 string — for a JSON body like {"url": "..."} that
+            // throws a silent DecodingError that this catch swallows.
+            let data = try await client.functions.invoke(
                 "gen-food-image",
                 options: .init(body: payload)
-            )
+            ) { (data: Data, response: HTTPURLResponse) -> Data in
+                guard 200..<300 ~= response.statusCode else {
+                    throw FunctionsError.httpError(code: response.statusCode, data: data)
+                }
+                return data
+            }
             guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let urlString = root["url"] as? String,
                   let url = URL(string: urlString)

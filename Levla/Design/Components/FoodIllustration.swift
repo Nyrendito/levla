@@ -160,9 +160,14 @@ struct FoodTile: View {
     }
 }
 
-/// FoodOrb — hero food art for recipe cards & detail. When a generated
-/// image URL is provided it displays that; otherwise renders abstract
-/// orbs over a warm wash.
+/// FoodOrb — hero food art for recipe cards & detail. Cal-AI-style: shows
+/// a real generated image when one's available, falls back to the abstract
+/// orb wash while loading / if image gen is unavailable.
+///
+/// Two ways to supply the image:
+/// - Pass `imageURL:` directly when the caller has already resolved it.
+/// - Pass `recipe:` (a Recipe) — the orb auto-fetches via ImageCacheService
+///   using the recipe's slug + title + uses. Most call sites use this.
 struct FoodOrb: View {
     let foods: [String]
     let color: Color
@@ -170,24 +175,54 @@ struct FoodOrb: View {
     var height: CGFloat = 280
     var radius: CGFloat = L.R.xxl
     var label: String? = nil
+    /// Caller-resolved image URL. Takes priority over auto-fetch.
     var imageURL: URL? = nil
+    /// Recipe whose generated image should fill the orb. The orb fetches
+    /// the URL in its own .task; nil means "no recipe, just fall back."
+    var recipe: Recipe? = nil
+
+    @State private var resolvedURL: URL?
+
+    /// The URL the orb should actually render, sized to height. We prefer the
+    /// caller-supplied one, otherwise use the one we resolved in .task.
+    private var effectiveURL: URL? {
+        ImageVariants.resized(imageURL ?? resolvedURL, targetPoints: height)
+    }
 
     var body: some View {
-        if let imageURL {
-            let displayURL = ImageVariants.resized(imageURL, targetPoints: height)
-            AsyncImage(url: displayURL) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable().scaledToFill()
-                        .frame(height: height)
-                        .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-                default:
-                    fallback
+        ZStack {
+            if let effectiveURL {
+                AsyncImage(url: effectiveURL) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    case .empty, .failure:
+                        fallback
+                    @unknown default:
+                        fallback
+                    }
                 }
+            } else {
+                fallback
             }
-        } else {
-            fallback
+        }
+        .frame(height: height)
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .task(id: recipe?.slug) {
+            // Skip if the caller already supplied an imageURL.
+            guard imageURL == nil else { return }
+            // Skip if we already resolved this recipe.
+            guard resolvedURL == nil else { return }
+            // Only auto-fetch when we have a recipe; otherwise fall back.
+            guard let recipe else { return }
+            resolvedURL = await ImageCacheService.shared.imageURL(
+                kind: .recipe,
+                key: recipe.slug,
+                title: recipe.title,
+                uses: recipe.uses
+            )
         }
     }
 

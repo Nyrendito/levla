@@ -222,13 +222,16 @@ private struct FeaturedRecipeCard: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 0) {
-                // Hero. Square aspect, food orb or future generated image.
+                // Hero. Square aspect; auto-fetches the recipe's generated
+                // image via ImageCacheService, falls back to the abstract
+                // orb wash while loading / when image gen is unavailable.
                 FoodOrb(
                     foods: recipe.uses,
                     color: recipe.color,
                     accent: recipe.accent,
                     height: 210,
-                    radius: 0
+                    radius: 0,
+                    recipe: recipe
                 )
                 .overlay(alignment: .topTrailing) {
                     if missing == 0 {

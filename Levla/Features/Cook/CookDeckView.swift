@@ -209,7 +209,7 @@ private struct SwipeCard: View {
 
     private func cardContent(size: CGSize) -> some View {
         ZStack {
-            FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: size.height, radius: L.R.xxl)
+            FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: size.height, radius: L.R.xxl, recipe: recipe)
             LinearGradient(
                 colors: [.clear, Color(hex: 0x140F0A).opacity(0.30), Color(hex: 0x140F0A).opacity(0.78)],
                 startPoint: .top, endPoint: .bottom
