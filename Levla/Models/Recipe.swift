@@ -316,4 +316,30 @@ struct Profile: Identifiable, Codable, Hashable, Sendable {
         let remaining = Double(dailyKcalGoal) - Double(dailyProteinGoal * 4) - Double(dailyFatGoal * 9)
         return max(0, Int((remaining / 4).rounded()))
     }
+
+    // MARK: - Micros (USDA / WHO / AHA reference intakes)
+
+    /// Daily fiber target — Institute of Medicine: 14 g per 1,000 kcal.
+    /// Falls back to 25 g (women) / 38 g (men) if kcal goal is missing.
+    var dailyFiberGoal: Int? {
+        if let kcal = dailyKcalGoal {
+            return Int((Double(kcal) * 14.0 / 1000.0).rounded())
+        }
+        switch sex {
+        case .male?:   return 38
+        case .female?: return 25
+        default:       return 30
+        }
+    }
+
+    /// Daily added-sugar ceiling — WHO < 10% of energy (we surface as
+    /// "left", lower is better). 50 g for a 2000 kcal diet.
+    var dailySugarGoal: Int? {
+        guard let kcal = dailyKcalGoal else { return 50 }
+        return Int((Double(kcal) * 0.10 / 4.0).rounded())
+    }
+
+    /// Daily sodium ceiling — American Heart Association ideal: 1,500 mg.
+    /// Use 2,300 mg as the practical cap most people are tracked against.
+    var dailySodiumGoal: Int? { 2_300 }
 }

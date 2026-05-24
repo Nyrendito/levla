@@ -15,6 +15,9 @@ struct AnalyzedMeal: Hashable, Sendable {
     var protein: Int
     var carbs: Int
     var fat: Int
+    var fiber: Int       // grams
+    var sugar: Int       // grams
+    var sodium: Int      // milligrams
     var confidence: Double
     var ingredients: [AnalyzedIngredient]
 
@@ -42,6 +45,9 @@ struct AnalyzedIngredient: Hashable, Sendable, Identifiable {
     var protein: Int
     var carbs: Int
     var fat: Int
+    var fiber: Int       // grams
+    var sugar: Int       // grams
+    var sodium: Int      // milligrams
 }
 
 @MainActor
@@ -58,11 +64,12 @@ final class MealAnalyzer {
                 name: "Mixed salad bowl",
                 portionGrams: 320,
                 kcal: 420, protein: 28, carbs: 32, fat: 22,
+                fiber: 6, sugar: 8, sodium: 540,
                 confidence: 0.55,
                 ingredients: [
-                    AnalyzedIngredient(name: "Chicken breast", grams: 120, kcal: 180, protein: 24, carbs: 0, fat: 6),
-                    AnalyzedIngredient(name: "Leafy greens",   grams: 80,  kcal: 30,  protein: 2,  carbs: 6, fat: 0),
-                    AnalyzedIngredient(name: "Dressing",       grams: 30,  kcal: 210, protein: 2,  carbs: 26, fat: 16),
+                    AnalyzedIngredient(name: "Chicken breast", grams: 120, kcal: 180, protein: 24, carbs: 0, fat: 6, fiber: 0, sugar: 0, sodium: 280),
+                    AnalyzedIngredient(name: "Leafy greens",   grams: 80,  kcal: 30,  protein: 2,  carbs: 6, fat: 0, fiber: 4, sugar: 2, sodium: 60),
+                    AnalyzedIngredient(name: "Dressing",       grams: 30,  kcal: 210, protein: 2,  carbs: 26, fat: 16, fiber: 2, sugar: 6, sodium: 200),
                 ]
             )
         }
@@ -125,7 +132,10 @@ final class MealAnalyzer {
                 kcal:    int(d, "kcal", "calories") ?? 0,
                 protein: int(d, "protein", "protein_g") ?? 0,
                 carbs:   int(d, "carbs", "carbs_g") ?? 0,
-                fat:     int(d, "fat", "fat_g") ?? 0
+                fat:     int(d, "fat", "fat_g") ?? 0,
+                fiber:   int(d, "fiber", "fiber_g") ?? 0,
+                sugar:   int(d, "sugar", "sugar_g") ?? 0,
+                sodium:  int(d, "sodium", "sodium_mg") ?? 0
             )
         }
 
@@ -138,6 +148,9 @@ final class MealAnalyzer {
             protein:     int(mealDict, "protein", "protein_g") ?? 0,
             carbs:       int(mealDict, "carbs", "carbs_g") ?? 0,
             fat:         int(mealDict, "fat", "fat_g") ?? 0,
+            fiber:       int(mealDict, "fiber", "fiber_g") ?? ingredients.map(\.fiber).reduce(0, +),
+            sugar:       int(mealDict, "sugar", "sugar_g") ?? ingredients.map(\.sugar).reduce(0, +),
+            sodium:      int(mealDict, "sodium", "sodium_mg") ?? ingredients.map(\.sodium).reduce(0, +),
             confidence:  double(mealDict, "confidence", "score") ?? 0.7,
             ingredients: ingredients
         )

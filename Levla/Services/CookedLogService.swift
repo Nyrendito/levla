@@ -33,6 +33,12 @@ final class CookedLogService {
     var todayCarbs:   Int { filteredToday.reduce(0) { $0 + $1.carbs } }
     var todayFat:     Int { filteredToday.reduce(0) { $0 + $1.fat } }
 
+    /// Micros — nil-coalesced because older rows logged before we tracked
+    /// them have null columns.
+    var todayFiber:   Int { filteredToday.reduce(0) { $0 + ($1.fiber  ?? 0) } }
+    var todaySugar:   Int { filteredToday.reduce(0) { $0 + ($1.sugar  ?? 0) } }
+    var todaySodium:  Int { filteredToday.reduce(0) { $0 + ($1.sodium ?? 0) } }
+
     var hasAnyToday: Bool { !filteredToday.isEmpty }
 
     /// The local-calendar day for which `todayEntries` was last fetched.
@@ -166,6 +172,9 @@ final class CookedLogService {
             protein: meal.protein,
             carbs:   meal.carbs,
             fat:     meal.fat,
+            fiber:   meal.fiber,
+            sugar:   meal.sugar,
+            sodium:  meal.sodium,
             cookedAt: Date()
         )
 

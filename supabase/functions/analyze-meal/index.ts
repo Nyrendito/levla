@@ -1,29 +1,32 @@
-// supabase/functions/analyze-meal — Cal-AI / BitePal flow: snap a photo,
-// get back identified meal + macros computed for the VISIBLE portion.
+// supabase/functions/analyze-meal v3 — Cal-AI / BitePal flow with micros.
+// Snaps a meal, returns identification + macros + micros (fiber, sugar,
+// sodium) computed for the VISIBLE portion. Macros from grams and food
+// density (P/C ×4, F ×9); micros from a typical-per-100g lookup the
+// model is asked to apply.
 //
-// The previous version asked the model for macros "per serving", which is
-// ambiguous and often defaults to a generic 1-serving estimate even when
-// the user clearly snapped a half portion or a heaped double. This version
-// is much stricter: it has to estimate grams using on-screen scale cues
-// (plate diameter, fork length, hand width, etc.) and compute macros for
-// THAT portion. The response now includes portion_g + per-ingredient
-// grams so the iOS side can show "~340g portion".
-//
-// Body: { image: "data:image/jpeg;base64,..." | base64 }
+// Body:    { image: "data:image/jpeg;base64,..." | base64 }
 // Returns: { name, portion_g, kcal, protein, carbs, fat,
-//            ingredients: [{name, grams, kcal, protein, carbs, fat}],
+//            fiber, sugar, sodium,
+//            ingredients: [{name, grams, kcal, protein, carbs, fat,
+//                           fiber, sugar, sodium}],
 //            confidence }
 
-import { corsHeaders, json } from "../_shared/cors.ts";
+import { corsHeaders, json } from "./_shared/cors.ts";
 
-const SYSTEM_PROMPT = `You are Levla's meal-analysis vision model. The user shows you a photo of a meal or single food item. Your job is to identify it AND estimate the calorie/macro content of the SPECIFIC PORTION visible in the photo — not a generic "1 serving".
+const SYSTEM_PROMPT = `You are Levla's meal-analysis vision model. The user shows you a photo of a meal or single food item. Your job is to identify it AND estimate the calorie, macro, AND micronutrient content of the SPECIFIC PORTION visible in the photo — not a generic "1 serving".
 
 Portion sizing is mandatory:
 - Estimate the total weight of food in grams (portion_g) and the grams of each visible ingredient.
-- Use on-screen scale cues: a dinner plate is ~26-28 cm diameter, a side plate ~20 cm, a fork ~20 cm long, a chopstick ~24 cm, a soda can ~12 cm tall, a hand ~18-20 cm long, a slice of bread ~12 cm wide.
-- Look at FOOD VOLUME, not surface area. A heaped scoop of rice that fills a 14 cm bowl to the brim is roughly 250 g cooked rice. A flat layer is closer to 130 g. Sauces and dressings add density — don't undercount them.
-- If the photo is angled, mentally rotate to estimate volume. If you genuinely can't tell, lower the confidence and pick a sensible middle value rather than 1 serving.
-- Compute kcal/protein/carbs/fat from THAT gram estimate using standard food density: protein has 4 kcal/g, carbs 4 kcal/g, fat 9 kcal/g. The top-level macros must equal the sum of ingredient macros within rounding (±5 kcal).
+- Use on-screen scale cues: a dinner plate is ~26-28 cm, a fork ~20 cm, a hand ~18-20 cm, a soda can ~12 cm tall.
+- Look at FOOD VOLUME, not surface area. A heaped bowl of rice fills more than a flat layer. Sauces and dressings add density.
+- If the photo is angled, mentally rotate to estimate. If unclear, lower confidence and pick a sensible middle value rather than defaulting to 1 serving.
+- Compute macros from grams using standard food density: protein 4 kcal/g, carbs 4 kcal/g, fat 9 kcal/g. Top-level macros = sum of ingredient macros within ±5 kcal.
+
+Micronutrients are mandatory:
+- fiber  (grams): estimate per ingredient using typical per-100g values (vegetables 2-5g/100g, beans/lentils 6-8g/100g, whole-grain bread ~7g/100g, fruit 2-4g/100g, animal protein ~0g/100g). Sum to the meal total.
+- sugar  (grams): combined naturally-occurring + added (fruit ~10g/100g, sweetened sauces / drinks high, plain proteins/oils ~0). Be honest about hidden sugar in dressings/sauces.
+- sodium (mg):    salt-derived. Restaurant / fried / cured foods can hit 500-1500mg per portion easily; home-cooked vegetable plates 200-500mg; bare fresh fruit ~0.
+- Top-level micros must approximately equal the sum of ingredient micros.
 
 Return ONLY JSON in this exact shape, no markdown:
 {
@@ -33,23 +36,42 @@ Return ONLY JSON in this exact shape, no markdown:
   "protein": 48,
   "carbs": 62,
   "fat": 14,
+  "fiber": 6,
+  "sugar": 3,
+  "sodium": 480,
   "ingredients": [
-    { "name": "Grilled chicken breast", "grams": 170, "kcal": 280, "protein": 53, "carbs": 0,  "fat": 6 },
-    { "name": "White rice",             "grams": 200, "kcal": 260, "protein": 5,  "carbs": 56, "fat": 1 },
-    { "name": "Steamed broccoli",       "grams": 50,  "kcal": 17,  "protein": 2,  "carbs": 3,  "fat": 0 },
-    { "name": "Olive oil drizzle",      "grams": 5,   "kcal": 45,  "protein": 0,  "carbs": 0,  "fat": 5 }
+    { "name": "Grilled chicken breast", "grams": 170, "kcal": 280, "protein": 53, "carbs": 0,  "fat": 6,  "fiber": 0, "sugar": 0, "sodium": 350 },
+    { "name": "White rice",             "grams": 200, "kcal": 260, "protein": 5,  "carbs": 56, "fat": 1,  "fiber": 1, "sugar": 0, "sodium": 5  },
+    { "name": "Steamed broccoli",       "grams": 50,  "kcal": 17,  "protein": 2,  "carbs": 3,  "fat": 0,  "fiber": 2, "sugar": 1, "sodium": 15 },
+    { "name": "Olive oil drizzle",      "grams": 5,   "kcal": 45,  "protein": 0,  "carbs": 0,  "fat": 5,  "fiber": 0, "sugar": 0, "sodium": 0  }
   ],
   "confidence": 0.78
 }
 
 Rules:
 - name: short, plain-English meal title.
-- portion_g: INTEGER, total weight of visible food in grams.
-- kcal / protein / carbs / fat: INTEGERS (grams for macros, kcal for energy).
-- ingredients: 1–6 items, each with its own grams + macros.
-- The kcal/protein/carbs/fat sum of ingredients must approximately equal the top-level numbers.
-- confidence: 0.0–1.0. Lower it when portion size is hard to judge (no scale cue, weird angle, partially obscured).
-- If you can't identify any food, return {"name":"Unknown","portion_g":0,"kcal":0,"protein":0,"carbs":0,"fat":0,"ingredients":[],"confidence":0.1}.`;
+- portion_g / kcal / protein / carbs / fat / fiber / sugar: INTEGERS in grams (sodium in milligrams).
+- ingredients: 1-6 items, each fully populated.
+- ingredient sums ≈ top-level totals (within rounding).
+- confidence 0.0-1.0; lower when portion is hard to judge.
+- If you can't identify food, return all zeros + name "Unknown" + confidence 0.1.`;
+
+const INGREDIENT_SCHEMA = {
+  type: "object",
+  properties: {
+    name:    { type: "string" },
+    grams:   { type: "integer" },
+    kcal:    { type: "integer" },
+    protein: { type: "integer" },
+    carbs:   { type: "integer" },
+    fat:     { type: "integer" },
+    fiber:   { type: "integer" },
+    sugar:   { type: "integer" },
+    sodium:  { type: "integer" },
+  },
+  required: ["name","grams","kcal","protein","carbs","fat","fiber","sugar","sodium"],
+  additionalProperties: false,
+};
 
 const SCHEMA = {
   type: "object",
@@ -60,25 +82,13 @@ const SCHEMA = {
     protein:   { type: "integer" },
     carbs:     { type: "integer" },
     fat:       { type: "integer" },
-    ingredients: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name:    { type: "string" },
-          grams:   { type: "integer" },
-          kcal:    { type: "integer" },
-          protein: { type: "integer" },
-          carbs:   { type: "integer" },
-          fat:     { type: "integer" },
-        },
-        required: ["name", "grams", "kcal", "protein", "carbs", "fat"],
-        additionalProperties: false,
-      },
-    },
-    confidence: { type: "number" },
+    fiber:     { type: "integer" },
+    sugar:     { type: "integer" },
+    sodium:    { type: "integer" },
+    ingredients: { type: "array", items: INGREDIENT_SCHEMA },
+    confidence:  { type: "number" },
   },
-  required: ["name", "portion_g", "kcal", "protein", "carbs", "fat", "ingredients", "confidence"],
+  required: ["name","portion_g","kcal","protein","carbs","fat","fiber","sugar","sodium","ingredients","confidence"],
   additionalProperties: false,
 };
 
@@ -105,7 +115,7 @@ Deno.serve(async (req: Request) => {
           {
             role: "user",
             content: [
-              { type: "text", text: "Analyze this meal. Estimate portion size in grams using visible scale cues, then return macros for THAT portion." },
+              { type: "text", text: "Analyze this meal. Estimate portion in grams via visible scale cues, then return macros AND micronutrients (fiber, sugar, sodium) for that portion." },
               { type: "image_url", image_url: { url, detail: "high" } },
             ],
           },
@@ -119,11 +129,8 @@ Deno.serve(async (req: Request) => {
     }
     const completion = await openaiRes.json();
     const text = completion?.choices?.[0]?.message?.content ?? "{}";
-    try {
-      return json(JSON.parse(text));
-    } catch {
-      return json({ error: "invalid_json_from_model", raw: text }, { status: 502 });
-    }
+    try { return json(JSON.parse(text)); }
+    catch { return json({ error: "invalid_json_from_model", raw: text }, { status: 502 }); }
   } catch (e) {
     return json({ error: String(e) }, { status: 500 });
   }

@@ -165,24 +165,64 @@ struct RecipeDetailView: View {
             .ignoresSafeArea(edges: .top)
             .background(L.paper.ignoresSafeArea())
 
-            BigCTA(title: cooking ? "Next step" : "Start cooking", icon: "flame", kind: .primary) {
-                if cooking {
-                    stepIdx = min(stepIdx + 1, recipe.steps.count - 1)
-                } else {
-                    cooking = true
-                    addMissingToShoppingList()
-                    logCookedEntry()
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 22)
+            stickyCTA
+                .padding(.horizontal, 18)
+                .padding(.bottom, 22)
         }
         .background(L.paper.ignoresSafeArea())
     }
 
+    // MARK: - Sticky CTA — three-stage flow
+
+    /// Three-state bottom button so the user only "logs" the meal when
+    /// they actually finish cooking. The old single CTA wrote a
+    /// cooked_entries row the moment they tapped "Start cooking" — which
+    /// inflated today's macros for recipes they just glanced at.
+    ///
+    /// State machine:
+    ///   .notStarted → "Start cooking"           → enters cooking mode at step 1, adds missing to shopping
+    ///   .cooking    → "Next step"               → advances stepIdx
+    ///   .cooking @ final step → "Log this meal" → writes the cooked_entry (servings-scaled)
+    ///   .logged     → "Logged ✓" (disabled)        → confirmation; closes after delay
+    @ViewBuilder
+    private var stickyCTA: some View {
+        switch cookingPhase {
+        case .notStarted:
+            BigCTA(title: "Start cooking", icon: "flame", kind: .primary) {
+                cooking = true
+                stepIdx = 0
+                addMissingToShoppingList()
+            }
+        case .cooking:
+            BigCTA(title: "Next step", icon: "arrowR", kind: .ink) {
+                stepIdx = min(stepIdx + 1, recipe.steps.count - 1)
+            }
+        case .readyToLog:
+            BigCTA(title: "Log this meal", icon: "check", kind: .primary) {
+                logCookedEntry()
+            }
+        case .logged:
+            BigCTA(title: "Logged ✓", icon: nil, kind: .light) { onClose() }
+        }
+    }
+
+    private enum CookingPhase { case notStarted, cooking, readyToLog, logged }
+
+    private var cookingPhase: CookingPhase {
+        if didLog { return .logged }
+        guard cooking else { return .notStarted }
+        if stepIdx >= recipe.steps.count - 1 { return .readyToLog }
+        return .cooking
+    }
+
+    @State private var didLog = false
+
     private func logCookedEntry() {
-        guard let uid = app.auth.currentUserId else { return }
-        Task { await app.cooked.log(recipe: recipe, servings: servings, userId: uid) }
+        guard let uid = app.auth.currentUserId, !didLog else { return }
+        Task {
+            await app.cooked.log(recipe: recipe, servings: servings, userId: uid)
+            didLog = true
+        }
     }
 
     // MARK: - Lifesum nutritional info block

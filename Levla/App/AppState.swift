@@ -13,6 +13,7 @@ final class AppState {
     let recipes = RecipeService()
     let cooked = CookedLogService()
     let weightLog = WeightLogService()
+    let water = WaterLogService()
 
     var selectedTab: MainTab = .home
     var presentingScan: ScanKind? = nil

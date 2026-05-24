@@ -59,18 +59,32 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 brandRow
 
-                // Macros card up top — Cal-AI-style daily totals against
-                // the user's personalized goals (Mifflin-St Jeor + activity
-                // + goal-adjusted kcal, with macro splits derived from it).
-                MacrosBar(
+                // 3-page Cal-AI-style daily totals carousel: page 1 macros,
+                // page 2 micros + Health Score, page 3 activity + water.
+                MacrosCarousel(
                     kcal:        app.cooked.todayKcal,
                     protein:     app.cooked.todayProtein,
                     carbs:       app.cooked.todayCarbs,
                     fat:         app.cooked.todayFat,
+                    fiber:       app.cooked.todayFiber,
+                    sugar:       app.cooked.todaySugar,
+                    sodium:      app.cooked.todaySodium,
+                    hasLogs:     app.cooked.hasAnyToday,
                     kcalGoal:    app.currentProfile?.dailyKcalGoal,
                     proteinGoal: app.currentProfile?.dailyProteinGoal,
                     carbsGoal:   app.currentProfile?.dailyCarbsGoal,
-                    fatGoal:     app.currentProfile?.dailyFatGoal
+                    fatGoal:     app.currentProfile?.dailyFatGoal,
+                    fiberGoal:   app.currentProfile?.dailyFiberGoal,
+                    sugarGoal:   app.currentProfile?.dailySugarGoal,
+                    sodiumGoal:  app.currentProfile?.dailySodiumGoal,
+                    stepsToday:  0,                 // Apple Health placeholder
+                    stepsGoal:   10_000,
+                    caloriesBurned: 0,              // Apple Health placeholder
+                    waterMl:     app.water.ml,
+                    waterGoalMl: app.water.goalMl,
+                    onWaterPlus:  { app.water.add() },
+                    onWaterMinus: { app.water.subtract() },
+                    onConnectHealth: { /* TODO: HealthKit permissions */ }
                 )
                 .padding(.horizontal, L.S.pad)
                 .padding(.top, 22)
