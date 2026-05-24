@@ -370,28 +370,16 @@ private struct LogMealResultStage: View {
     }
 
     private var titleBlock: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             Text(meal.name)
                 .font(.manrope(24, .heavy))
                 .kerning(-0.6)
                 .foregroundStyle(L.ink)
                 .multilineTextAlignment(.center)
-
-            HStack(spacing: 8) {
-                if let portion = meal.portionLabel {
-                    Text(portion)
-                        .font(.manrope(11.5, .heavy))
-                        .tracking(0.4)
-                        .foregroundStyle(L.brand)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(L.brandBg, in: Capsule())
-                }
-                Text(meal.displayConfidence.uppercased())
-                    .font(.manrope(10, .heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(L.muted)
-            }
+            Text(meal.displayConfidence.uppercased())
+                .font(.manrope(10, .heavy))
+                .tracking(1.4)
+                .foregroundStyle(L.muted)
         }
         .frame(maxWidth: .infinity)
     }
@@ -469,21 +457,10 @@ private struct LogMealResultStage: View {
                 ForEach(Array(meal.ingredients.enumerated()), id: \.element.id) { (i, ing) in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(ing.name)
-                                    .font(.manrope(15, .heavy))
-                                    .kerning(-0.2)
-                                    .foregroundStyle(L.ink)
-                                if ing.grams > 0 {
-                                    Text("\(ing.grams)g")
-                                        .font(.manrope(11, .heavy))
-                                        .tracking(0.2)
-                                        .foregroundStyle(L.brand)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(L.brandBg, in: Capsule())
-                                }
-                            }
+                            Text(ing.name)
+                                .font(.manrope(15, .heavy))
+                                .kerning(-0.2)
+                                .foregroundStyle(L.ink)
                             HStack(spacing: 6) {
                                 Text("\(ing.protein)P")
                                 Text("·").foregroundStyle(L.muted.opacity(0.4))
