@@ -1,19 +1,14 @@
 import SwiftUI
 
-/// Home — a decision assistant, not a dashboard.
-/// One question: "What should I cook with what I have?"
+/// Home — driven by what the user actually cooked today + what they could
+/// cook next. No fake expiry tracking, no dashboard noise.
 ///
 /// Top to bottom:
 /// 1. Levla wordmark
-/// 2. "Tonight — cook X" hero (top-ranked recipe)
-/// 3. Featured recipe card
-/// 4. "Recently added" — last 3 things scanned in
-/// 5. Big Scan fridge CTA
-///
-/// Deliberately removed: expiry chips, "use today / 2d left" pills,
-/// "expiring soon" banner, "use first" section, freshness tracker dials.
-/// We can't reliably infer time-based expiry from a fridge photo, so we
-/// don't pretend to.
+/// 2. Today's macros (kcal + carbs/fat/protein) — Cal-AI-style stacked bar
+/// 3. "COOK TONIGHT" label + featured recipe card (details on the card itself)
+/// 4. "RECENTLY ADDED" — last 3 scans
+/// 5. Big "Scan fridge" CTA
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var openedRecipe: Recipe?
@@ -35,16 +30,34 @@ struct HomeView: View {
         ScrollView {
             VStack(spacing: 0) {
                 brandRow
-                heroHeadline
+
+                // Macros card up top — Cal-AI-style daily totals.
+                MacrosBar(
+                    kcal:    app.cooked.todayKcal,
+                    protein: app.cooked.todayProtein,
+                    carbs:   app.cooked.todayCarbs,
+                    fat:     app.cooked.todayFat
+                )
+                .padding(.horizontal, L.S.pad)
+                .padding(.top, 22)
+
                 if !app.fridge.items.isEmpty, let m = topRecipe {
+                    sectionLabel("COOK TONIGHT")
+                        .padding(.horizontal, L.S.pad)
+                        .padding(.top, 30)
                     FeaturedRecipeCard(match: m) { openedRecipe = m.recipe }
                         .padding(.horizontal, L.S.pad)
-                        .padding(.top, 14)
-                }
-                if !recentlyAdded.isEmpty {
-                    recentlyAddedSection
+                        .padding(.top, 10)
+                } else if app.fridge.items.isEmpty {
+                    EmptyFridgeHint()
+                        .padding(.horizontal, L.S.pad)
                         .padding(.top, 28)
                 }
+
+                if !recentlyAdded.isEmpty {
+                    recentlyAddedSection.padding(.top, 30)
+                }
+
                 BigCTA(title: "Scan fridge", icon: "camera", kind: .primary) {
                     app.presentingScan = .fridge
                 }
@@ -59,8 +72,9 @@ struct HomeView: View {
             RecipeDetailView(recipe: recipe) { openedRecipe = nil }
         }
         .task {
-            if let uid = app.auth.currentUserId, app.fridge.items.isEmpty {
-                await app.fridge.reload(userId: uid)
+            if let uid = app.auth.currentUserId {
+                if app.fridge.items.isEmpty { await app.fridge.reload(userId: uid) }
+                await app.cooked.reloadToday(userId: uid)
             }
             await app.recipes.reload(for: app.fridge.items)
         }
@@ -78,51 +92,6 @@ struct HomeView: View {
         }
         .padding(.horizontal, L.S.pad)
         .padding(.top, 56)
-    }
-
-    // MARK: - Hero
-
-    private var heroHeadline: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("TONIGHT")
-                .font(.mono(11))
-                .tracking(1.2)
-                .foregroundStyle(L.ink.opacity(0.4))
-
-            if app.fridge.items.isEmpty {
-                Text("Scan your fridge\nto get started.")
-                    .font(.manrope(38, .heavy))
-                    .kerning(-1.3)
-                    .lineSpacing(2)
-                    .foregroundStyle(L.ink)
-            } else if let m = topRecipe {
-                Text("Cook \(m.recipe.title).")
-                    .font(.manrope(34, .heavy))
-                    .kerning(-1.2)
-                    .lineSpacing(2)
-                    .foregroundStyle(L.ink)
-                Text(reasonLine(for: m))
-                    .font(.manrope(15, .medium))
-                    .foregroundStyle(L.ink.opacity(0.55))
-                    .padding(.top, 2)
-            } else {
-                Text("Nothing to cook yet.")
-                    .font(.manrope(34, .heavy))
-                    .kerning(-1.2)
-                    .foregroundStyle(L.ink)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, L.S.pad)
-        .padding(.top, 26)
-    }
-
-    private func reasonLine(for m: RecipeMatch) -> String {
-        if m.matchPct == 100 {
-            return "You have every ingredient."
-        }
-        let have = m.recipe.ingredients.count - m.missingIngredients.count
-        return "\(m.recipe.timeMinutes) min · \(have) of \(m.recipe.ingredients.count) in your fridge"
     }
 
     // MARK: - Recently added
@@ -153,15 +122,26 @@ struct HomeView: View {
             .padding(.horizontal, L.S.pad)
         }
     }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.mono(11)).tracking(1.2)
+            .foregroundStyle(L.ink.opacity(0.4))
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 // MARK: - Featured recipe card
 
+/// All the details live ON the card — title, time, kcal, and what's missing.
+/// The headline above is just "COOK TONIGHT".
 private struct FeaturedRecipeCard: View {
     let match: RecipeMatch
     let onTap: () -> Void
 
     private var recipe: Recipe { match.recipe }
+
+    private var missing: Int { match.missingIngredients.count }
 
     var body: some View {
         Button(action: onTap) {
@@ -169,24 +149,25 @@ private struct FeaturedRecipeCard: View {
                 FoodOrb(foods: recipe.uses, color: recipe.color, accent: recipe.accent, height: 200, radius: 0, label: recipe.uses.first)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous).offset(y: 1))
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text(recipe.title)
-                        .font(.manrope(20, .heavy))
+                        .font(.manrope(22, .heavy))
                         .kerning(-0.5)
                         .foregroundStyle(L.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                    HStack(spacing: 10) {
-                        Label("\(recipe.timeMinutes) min", systemImage: "clock")
-                            .font(.manrope(13, .bold))
-                            .foregroundStyle(L.ink.opacity(0.6))
-                        Text("·").foregroundStyle(L.ink.opacity(0.25))
-                        Text("Uses \(match.recipe.uses.count - match.missingIngredients.count) of yours")
-                            .font(.manrope(13, .bold))
-                            .foregroundStyle(L.ink.opacity(0.6))
+
+                    HStack(spacing: 12) {
+                        metaPill(icon: "clock", text: "\(recipe.timeMinutes) min")
+                        metaPill(icon: "flame", text: "\(recipe.kcal) kcal")
+                        if missing == 0 {
+                            metaPill(icon: "check", text: "All in fridge", tone: .mint)
+                        } else {
+                            metaPill(icon: "cart", text: "\(missing) to buy", tone: .pop)
+                        }
                     }
                 }
-                .padding(16)
+                .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -194,6 +175,28 @@ private struct FeaturedRecipeCard: View {
         .buttonStyle(.plain)
         .modifier(_HomeCardShadow())
         .tapPress()
+    }
+
+    private enum Tone { case neutral, mint, pop }
+
+    @ViewBuilder
+    private func metaPill(icon: String, text: String, tone: Tone = .neutral) -> some View {
+        let (fg, bg): (Color, Color) = {
+            switch tone {
+            case .neutral: return (L.ink.opacity(0.6), L.ink.opacity(0.04))
+            case .mint:    return (L.mint, L.mintBg)
+            case .pop:     return (L.pop, L.popBg)
+            }
+        }()
+        HStack(spacing: 5) {
+            LSymbol(key: icon, size: 12, weight: .heavy)
+            Text(text)
+        }
+        .font(.manrope(12.5, .heavy))
+        .kerning(-0.1)
+        .foregroundStyle(fg)
+        .padding(.horizontal, 9).padding(.vertical, 6)
+        .background(bg, in: Capsule())
     }
 }
 
@@ -242,6 +245,27 @@ private struct RecentRow: View {
                 Rectangle().fill(L.ink.opacity(0.07)).frame(height: 0.5).padding(.leading, 68)
             }
         }
+    }
+}
+
+// MARK: - Empty state
+
+private struct EmptyFridgeHint: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Scan your fridge")
+                .font(.manrope(22, .heavy))
+                .kerning(-0.5)
+                .foregroundStyle(L.ink)
+            Text("Levla suggests what to cook based on what you already have.")
+                .font(.manrope(14, .semibold))
+                .foregroundStyle(L.ink.opacity(0.55))
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .modifier(_HomeCardShadow())
     }
 }
 

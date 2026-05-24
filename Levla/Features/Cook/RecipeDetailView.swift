@@ -179,14 +179,19 @@ struct RecipeDetailView: View {
                     stepIdx = min(stepIdx + 1, recipe.steps.count - 1)
                 } else {
                     cooking = true
-                    // Cooking starts → auto-add anything missing to the shopping list.
                     addMissingToShoppingList()
+                    logCookedEntry()
                 }
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 22)
         }
         .background(L.paper.ignoresSafeArea())
+    }
+
+    private func logCookedEntry() {
+        guard let uid = app.auth.currentUserId else { return }
+        Task { await app.cooked.log(recipe: recipe, servings: servings, userId: uid) }
     }
 
     private var liveReason: String {

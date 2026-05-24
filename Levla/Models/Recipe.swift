@@ -38,6 +38,7 @@ struct Recipe: Identifiable, Codable, Hashable, Sendable {
     var kcal: Int
     var protein: Int
     var carbs: Int
+    var fat: Int
     var difficulty: String
     var matchPct: Int
     var missing: [String]
@@ -52,7 +53,7 @@ struct Recipe: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, slug, title, subtitle
         case timeMinutes = "time_minutes"
-        case kcal, protein, carbs, difficulty
+        case kcal, protein, carbs, fat, difficulty
         case matchPct = "match_pct"
         case missing, uses, why
         case colorHex = "color_hex"

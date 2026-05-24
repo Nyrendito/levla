@@ -108,7 +108,37 @@ drop policy if exists "shopping_delete_own" on public.shopping_items;
 create policy "shopping_delete_own" on public.shopping_items for delete using (auth.uid() = user_id);
 
 -- ============================================================================
--- 4. RECIPE FAVOURITES (optional — for Cook deck "save")
+-- 4. COOKED ENTRIES — daily macro log (driven by "Start cooking" taps)
+-- ============================================================================
+create table if not exists public.cooked_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  recipe_slug text not null,
+  recipe_title text not null,
+  servings int not null default 1 check (servings between 1 and 12),
+  kcal int not null default 0,
+  protein int not null default 0,
+  carbs int not null default 0,
+  fat int not null default 0,
+  cooked_at timestamptz not null default now()
+);
+
+create index if not exists cooked_entries_user_idx on public.cooked_entries(user_id);
+create index if not exists cooked_entries_user_day_idx on public.cooked_entries(user_id, cooked_at desc);
+
+alter table public.cooked_entries enable row level security;
+
+drop policy if exists "cooked_select_own" on public.cooked_entries;
+create policy "cooked_select_own" on public.cooked_entries for select using (auth.uid() = user_id);
+
+drop policy if exists "cooked_insert_own" on public.cooked_entries;
+create policy "cooked_insert_own" on public.cooked_entries for insert with check (auth.uid() = user_id);
+
+drop policy if exists "cooked_delete_own" on public.cooked_entries;
+create policy "cooked_delete_own" on public.cooked_entries for delete using (auth.uid() = user_id);
+
+-- ============================================================================
+-- 5. RECIPE FAVOURITES (optional — for Cook deck "save")
 -- ============================================================================
 create table if not exists public.recipe_favourites (
   user_id uuid not null references auth.users(id) on delete cascade,

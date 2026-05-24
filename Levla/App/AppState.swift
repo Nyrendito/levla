@@ -10,6 +10,7 @@ final class AppState {
     let fridge = FridgeService()
     let shopping = ShoppingService()
     let recipes = RecipeService()
+    let cooked = CookedLogService()
 
     var selectedTab: MainTab = .home
     var presentingScan: ScanKind? = nil
@@ -20,7 +21,8 @@ final class AppState {
         if let uid = auth.currentUserId {
             async let f: Void = fridge.reload(userId: uid)
             async let s: Void = shopping.reload(userId: uid)
-            _ = await (f, s)
+            async let c: Void = cooked.reloadToday(userId: uid)
+            _ = await (f, s, c)
             await recipes.reload(for: fridge.items)
         }
     }
@@ -29,7 +31,8 @@ final class AppState {
         guard let uid = auth.currentUserId else { return }
         async let f: Void = fridge.reload(userId: uid)
         async let s: Void = shopping.reload(userId: uid)
-        _ = await (f, s)
+        async let c: Void = cooked.reloadToday(userId: uid)
+        _ = await (f, s, c)
         await recipes.reload(for: fridge.items)
     }
 

@@ -147,6 +147,7 @@ final class RecipeService {
                 kcal: int("kcal", "calories", "energy") ?? 400,
                 protein: int("protein", "protein_g") ?? 20,
                 carbs: int("carbs", "carbs_g") ?? 30,
+                fat: int("fat", "fat_g") ?? 15,
                 difficulty: str("difficulty", "level") ?? "Easy",
                 matchPct: 0,
                 missing: [],
