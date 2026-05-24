@@ -51,13 +51,14 @@ final class RecipeService {
         let payload = SuggestRequest(fridge: items.map(WireItem.init))
 
         do {
-            let data: Data = try await client.functions.invoke(
-                "suggest-recipes",
-                options: .init(body: payload)
-            )
-            // Parse loosely — the LLM occasionally returns fields with
-            // slightly off names or types. We extract what we can and
-            // discard the rest.
+            // Bypass the SDK's auto-decode so we can do permissive parsing
+            // ourselves. We hand a closure that returns the raw bytes.
+            let data = try await client.functions.invoke("suggest-recipes",
+                                                         options: .init(body: payload)) {
+                (data: Data, response: HTTPURLResponse) -> Data in
+                if 200..<300 ~= response.statusCode { return data }
+                throw FunctionsError.httpError(code: response.statusCode, data: data)
+            }
             let mapped = parseRecipes(from: data)
             if !mapped.isEmpty {
                 recipes = mapped

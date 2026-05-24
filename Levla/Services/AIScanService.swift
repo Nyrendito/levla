@@ -32,11 +32,13 @@ final class AIScanService {
         }
 
         let payload = FridgeScanRequest(images: dataURIs)
-        let data: Data = try await client.functions.invoke(
+        // Decode straight into our response type. Asking for `Data` here
+        // makes the SDK try JSONDecoder.decode(Data.self, …) which expects a
+        // base64 string — our response is a JSON object → DecodingError.
+        let decoded: ScanItemsResponse = try await client.functions.invoke(
             "scan-fridge",
             options: .init(body: payload)
         )
-        let decoded = try JSONDecoder().decode(ScanItemsResponse.self, from: data)
         return decoded.items.map { $0.toCandidate() }
     }
 
@@ -63,11 +65,10 @@ final class AIScanService {
         try await requireSession(client: client)
 
         let payload = ReceiptScanRequest(text: text)
-        let data: Data = try await client.functions.invoke(
+        let decoded: ScanItemsResponse = try await client.functions.invoke(
             "scan-receipt",
             options: .init(body: payload)
         )
-        let decoded = try JSONDecoder().decode(ScanItemsResponse.self, from: data)
         return decoded.items.map { $0.toCandidate() }
     }
 
@@ -87,11 +88,10 @@ final class AIScanService {
         try await requireSession(client: client)
 
         let payload = BarcodeRequest(code: code)
-        let data: Data = try await client.functions.invoke(
+        let decoded: BarcodeResponse = try await client.functions.invoke(
             "lookup-barcode",
             options: .init(body: payload)
         )
-        let decoded = try JSONDecoder().decode(BarcodeResponse.self, from: data)
         return decoded.item?.toCandidate()
     }
 
