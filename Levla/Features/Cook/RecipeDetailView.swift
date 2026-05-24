@@ -12,6 +12,13 @@ struct RecipeDetailView: View {
     @State private var stepIdx = 0
     @State private var addedToShoppingCount = 0
 
+    /// LLM returns ingredient amounts for a base serving count. We assume 2
+    /// (the same as the stepper's default), and scale the displayed amount
+    /// by `servings / baseServings` so changing the stepper actually moves
+    /// the numbers.
+    private let baseServings = 2
+    private var scaleFactor: Double { Double(servings) / Double(baseServings) }
+
     private var match: RecipeMatch {
         RecipeMatcher.match(recipe: recipe, fridge: app.fridge.items)
     }
@@ -90,7 +97,7 @@ struct RecipeDetailView: View {
 
                     VStack(spacing: 0) {
                         ForEach(Array(liveIngredients.enumerated()), id: \.element.id) { (i, ing) in
-                            ingredientRow(ing, isLast: i == liveIngredients.count - 1)
+                            ingredientRow(ing, isLast: i == liveIngredients.count - 1, scale: scaleFactor)
                         }
                     }
                     .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -267,7 +274,8 @@ struct RecipeDetailView: View {
     }
 
     @ViewBuilder
-    fileprivate func ingredientRow(_ ing: RecipeIngredient, isLast: Bool) -> some View {
+    fileprivate func ingredientRow(_ ing: RecipeIngredient, isLast: Bool, scale: Double) -> some View {
+        let displayAmount = IngredientScaler.scale(ing.amount, factor: scale)
         HStack(spacing: 14) {
             FoodTile(food: ing.foodKey, size: 40, radius: 10)
             VStack(alignment: .leading, spacing: 2) {
@@ -275,9 +283,11 @@ struct RecipeDetailView: View {
                     .font(.manrope(15, .heavy))
                     .kerning(-0.2)
                     .foregroundStyle(ing.have ? L.ink : L.muted)
-                Text(ing.amount)
+                Text(displayAmount)
                     .font(.manrope(12, .semibold))
                     .foregroundStyle(L.muted)
+                    .contentTransition(.numericText())
+                    .animation(.easeInOut(duration: 0.18), value: displayAmount)
             }
             Spacer()
             if ing.have {
@@ -397,33 +407,56 @@ struct BigStat: View {
     }
 }
 
+/// Servings stepper — balanced pill with matching outlined - / + buttons on
+/// either side of a centered count + label. Replaces the older off-center
+/// "minus is plain, plus is filled dark" combo which felt visually unbalanced.
 struct BigStepper: View {
     @Binding var value: Int
 
     var body: some View {
         HStack(spacing: 0) {
-            Button { value = max(1, value - 1) } label: {
-                LSymbol(key: "minus", size: 16, weight: .heavy)
+            stepBtn(icon: "minus", enabled: value > 1) {
+                guard value > 1 else { return }
+                withAnimation(.easeInOut(duration: 0.15)) { value -= 1 }
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(value)")
+                    .font(.manrope(15.5, .heavy))
                     .foregroundStyle(L.ink)
-                    .frame(width: 34, height: 34)
+                    .contentTransition(.numericText())
+                    .animation(.easeInOut(duration: 0.18), value: value)
+                Text(value == 1 ? "serving" : "servings")
+                    .font(.manrope(11, .heavy))
+                    .tracking(0.3)
+                    .foregroundStyle(L.muted)
             }
-            .buttonStyle(.plain)
-            Text("\(value) serv")
-                .font(.manrope(14, .heavy))
-                .kerning(-0.2)
-                .foregroundStyle(L.ink)
-                .frame(minWidth: 46)
-            Button { value += 1 } label: {
-                LSymbol(key: "plus", size: 16, weight: .heavy)
-                    .foregroundStyle(L.cream)
-                    .frame(width: 34, height: 34)
-                    .background(L.ink, in: Circle())
+            .frame(minWidth: 78)
+            .padding(.horizontal, 4)
+
+            stepBtn(icon: "plus", enabled: true) {
+                withAnimation(.easeInOut(duration: 0.15)) { value += 1 }
             }
-            .buttonStyle(.plain)
         }
         .padding(4)
         .background(.white, in: Capsule())
+        .overlay(Capsule().strokeBorder(L.hairline, lineWidth: 0.5))
         .modifier(_StepperShadow())
+    }
+
+    private func stepBtn(icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .strokeBorder(L.ink.opacity(enabled ? 0.12 : 0.06), lineWidth: 1)
+                LSymbol(key: icon, size: 13, weight: .heavy)
+                    .foregroundStyle(enabled ? L.ink : L.ink.opacity(0.35))
+            }
+            .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .tapPress()
     }
 }
 

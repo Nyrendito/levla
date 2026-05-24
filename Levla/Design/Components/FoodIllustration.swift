@@ -302,46 +302,29 @@ struct FoodOrb: View {
         }
     }
 
+    /// Clean photo-card placeholder while the AI image is generating /
+    /// while the cache is empty. Avoids the old multi-orb abstract that
+    /// readers misread as "the image" — this is unmistakably a loading
+    /// state.
     @ViewBuilder
     private var fallback: some View {
-        let arr = foods.isEmpty ? ["tomato"] : foods
         ZStack {
-            color
-            // wash gradient
+            // Pure white photo-card surface — matches the style of the
+            // real AI-generated photos so the transition is seamless.
+            Color.white
+
+            // Very subtle warm wash from the recipe's accent so the card
+            // doesn't read as a blank rectangle. The accent is only ~6%
+            // visible and tucked into the bottom-right corner.
             RadialGradient(
-                colors: [Color.white.opacity(0.7), .clear],
-                center: .init(x: 0.3, y: 0.0),
+                colors: [accent.opacity(0.06), .clear],
+                center: .init(x: 0.85, y: 0.9),
                 startRadius: 0,
-                endRadius: 300
-            )
-            RadialGradient(
-                colors: [accent.opacity(0.22), .clear],
-                center: .init(x: 0.9, y: 1.0),
-                startRadius: 0,
-                endRadius: 240
+                endRadius: 280
             )
 
-            GeometryReader { g in
-                let s = min(g.size.width, g.size.height)
-                let primarySize = min(s * 0.62, 200)
-
-                // shadow under primary
-                Ellipse()
-                    .fill(Color(hex: 0x282016).opacity(0.10))
-                    .frame(width: primarySize * 0.9, height: primarySize * 0.18)
-                    .blur(radius: 8)
-                    .position(x: g.size.width * 0.5, y: g.size.height * 0.66)
-
-                // primary orb
-                orb(food: arr[0], size: primarySize)
-                    .position(x: g.size.width * 0.5, y: g.size.height * 0.56)
-
-                // supporting orbs
-                if arr.count > 1 { orb(food: arr[1], size: 70).position(x: g.size.width * 0.22, y: g.size.height * 0.28) }
-                if arr.count > 2 { orb(food: arr[2], size: 62).position(x: g.size.width * 0.80, y: g.size.height * 0.28) }
-                if arr.count > 3 { orb(food: arr[3], size: 50).position(x: g.size.width * 0.80, y: g.size.height * 0.80) }
-                if arr.count > 4 { orb(food: arr[4], size: 44).position(x: g.size.width * 0.18, y: g.size.height * 0.80) }
-            }
+            // Centered shimmer disc that pulses while the image loads.
+            ShimmerDisc()
 
             if let label {
                 VStack {
@@ -350,7 +333,7 @@ struct FoodOrb: View {
                         Text(label.uppercased())
                             .font(.mono(11))
                             .tracking(0.8)
-                            .foregroundStyle(Color(hex: 0x282016).opacity(0.55))
+                            .foregroundStyle(L.ink.opacity(0.45))
                         Spacer()
                     }
                 }
@@ -361,17 +344,29 @@ struct FoodOrb: View {
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
+}
 
-    @ViewBuilder
-    private func orb(food: String, size: CGFloat) -> some View {
-        let f = FoodPalette.palette(for: food)
-        Circle()
-            .fill(f.fg)
-            .frame(width: size, height: size)
-            .overlay(
+/// Tiny pulsing disc + "generating image" hint shown while we wait for
+/// gen-food-image. Disappears the moment the real photo loads.
+private struct ShimmerDisc: View {
+    @State private var pulsing = false
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle().fill(L.ink.opacity(0.04)).frame(width: 88, height: 88)
                 Circle()
-                    .stroke(f.rim.opacity(0.35), lineWidth: 0)
-            )
-            .shadow(color: Color(hex: 0x282016).opacity(0.10), radius: size * 0.18, x: 0, y: size * 0.06)
+                    .strokeBorder(L.ink.opacity(pulsing ? 0.15 : 0.08), lineWidth: 1.5)
+                    .frame(width: 88, height: 88)
+                    .scaleEffect(pulsing ? 1.06 : 1.0)
+                Image(systemName: "photo.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(L.ink.opacity(0.30))
+            }
+            Text("Generating photo…")
+                .font(.manrope(11, .heavy))
+                .tracking(0.4)
+                .foregroundStyle(L.ink.opacity(0.40))
+        }
+        .onAppear { withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { pulsing = true } }
     }
 }
