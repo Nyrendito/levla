@@ -108,7 +108,7 @@ struct HomeView: View {
                 if app.fridge.items.isEmpty { await app.fridge.reload(userId: uid) }
                 await app.cooked.reloadToday(userId: uid)
             }
-            await app.recipes.reload(for: app.fridge.items)
+            await app.recipes.reload(for: app.fridge.items, profile: app.currentProfile)
             mealPage = currentMealIndex
         }
     }
@@ -128,7 +128,7 @@ struct HomeView: View {
                     .baselineOffset(8)
             }
             Spacer()
-            BigIconBtn(icon: "user") {}
+            BigIconBtn(icon: "user") { app.presentingProfile = true }
                 .opacity(0.95)
         }
         .padding(.horizontal, L.S.pad)

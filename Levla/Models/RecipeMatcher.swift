@@ -36,11 +36,26 @@ struct RecipeMatch: Identifiable, Hashable {
 }
 
 enum RecipeMatcher {
+    /// Pantry staples we assume the user *always* has. Mirrors the same
+    /// assumption baked into the `suggest-recipes` system prompt, so the
+    /// in-app match% matches what the model used to filter recipes.
+    ///
+    /// Keep this in sync with `gen-food-image` / `suggest-recipes` on the
+    /// server side.
+    static let pantryStaples: Set<String> = [
+        "salt", "pepper", "oil", "olive_oil", "olive-oil",
+        "butter", "water", "sugar", "vinegar",
+        "garlic", "onion",   // very commonly assumed
+        "flour", "rice",     // dry pantry basics
+        "spices", "herbs",
+    ]
+
     /// Recompute availability from the user's current fridge.
     /// We deliberately don't infer "expires soon" — we can't know from a
     /// scan, so only `have` / `low` / `toBuy` are surfaced.
     static func match(recipe: Recipe, fridge: [FoodItem]) -> RecipeMatch {
-        let fridgeKeys = Set(fridge.map(\.foodKey))
+        // Virtual fridge = real fridge keys ∪ pantry staples
+        let fridgeKeys = Set(fridge.map(\.foodKey)).union(pantryStaples)
         let lowKeys: Set<String> = Set(fridge.filter { $0.status == .low }.map(\.foodKey))
 
         let neededKeys = recipe.ingredients.isEmpty

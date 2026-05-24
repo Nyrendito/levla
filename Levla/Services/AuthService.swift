@@ -33,7 +33,20 @@ final class AuthService {
             // Stable demo user id so the offline DB has a stable owner.
             let demoId = UUID(uuidString: "DEADBEEF-0000-0000-0000-000000000001")!
             state = .signedIn(userId: demoId, email: "demo@levla.app")
-            profile = Profile(id: demoId, displayName: "Eva", streakDays: 5, fridgeScore: 8)
+            profile = Profile(
+                id: demoId,
+                displayName: "Eva",
+                streakDays: 5,
+                fridgeScore: 8,
+                sex: .female,
+                birthYear: 1997,
+                heightCm: 168,
+                weightKg: 62,
+                goal: .maintain,
+                activityLevel: .moderate,
+                dietaryPrefs: [],
+                onboarded: true
+            )
             return
         }
 

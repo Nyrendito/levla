@@ -17,19 +17,13 @@ export const CATEGORIES = [
 
 export const DIFFICULTIES = ["Easy", "Medium", "Hard"] as const;
 
-export const COLOR_PAIRS = [
-  ["EFD8C0", "C97B4B"],
-  ["E1E9D2", "6B8A5C"],
-  ["DCE6CC", "5C7E40"],
-  ["F2E5D2", "B8884A"],
-  ["F3D6C6", "C9543C"],
-  ["F4ECC0", "D6A45A"],
-  ["DEE5C9", "637840"],
-  ["F1ECDE", "D6A45A"],
-  ["E0E5C7", "7E904A"],
-];
+export const MEAL_TYPES = ["breakfast", "lunch", "dinner"] as const;
 
-export const COLOR_HEXES = Array.from(new Set(COLOR_PAIRS.flat()));
+export const COLOR_HEXES = [
+  "EFD8C0", "C97B4B", "E1E9D2", "6B8A5C", "DCE6CC", "5C7E40",
+  "F2E5D2", "B8884A", "F3D6C6", "C9543C", "F4ECC0", "D6A45A",
+  "DEE5C9", "637840", "F1ECDE", "E0E5C7", "7E904A",
+];
 
 /// Schema used by BOTH scan-fridge and scan-receipt — same item shape.
 export const itemsSchema = {
@@ -56,7 +50,8 @@ export const itemsSchema = {
   additionalProperties: false,
 };
 
-/// Schema for the suggest-recipes function. 6 recipes, each fully specified.
+/// Schema for the suggest-recipes function. 12 recipes split across
+/// breakfast/lunch/dinner, each fully specified including fat + mealType.
 export const recipesSchema = {
   type: "object",
   properties: {
@@ -72,6 +67,8 @@ export const recipesSchema = {
           kcal:        { type: "integer" },
           protein:     { type: "integer" },
           carbs:       { type: "integer" },
+          fat:         { type: "integer" },
+          mealType:    { type: "string", enum: [...MEAL_TYPES] },
           difficulty:  { type: "string", enum: [...DIFFICULTIES] },
           uses:        { type: "array", items: { type: "string", enum: [...FOOD_KEYS] } },
           why:         { type: "string" },
@@ -94,8 +91,8 @@ export const recipesSchema = {
           steps: { type: "array", items: { type: "string" } },
         },
         required: [
-          "slug", "title", "subtitle", "timeMinutes", "kcal", "protein", "carbs",
-          "difficulty", "uses", "why", "colorHex", "accentHex", "tags",
+          "slug", "title", "subtitle", "timeMinutes", "kcal", "protein", "carbs", "fat",
+          "mealType", "difficulty", "uses", "why", "colorHex", "accentHex", "tags",
           "ingredients", "steps",
         ],
         additionalProperties: false,

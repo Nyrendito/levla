@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// Bottom sheet shown when the user taps the center Scan FAB.
-/// Two big choices (Scan fridge / Scan receipt) + three minis (Barcode / Voice / Manual).
+/// Two big choices (Scan fridge / Scan receipt) + three minis (Barcode / Voice / Log a meal).
 struct ScanSheetView: View {
     let onFridge: () -> Void
     let onReceipt: () -> Void
     let onBarcode: () -> Void
     let onVoice: () -> Void
-    let onManual: () -> Void
+    let onLogMeal: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,9 +28,9 @@ struct ScanSheetView: View {
             .padding(.top, 18)
 
             VStack(spacing: 8) {
+                ScanMiniRow(icon: "camera",label: "Log a meal",          sub: "Snap a photo — get kcal, protein, carbs, fat", action: onLogMeal)
                 ScanMiniRow(icon: "scan",  label: "Scan a barcode",      sub: "Quickly add a single product",  action: onBarcode)
                 ScanMiniRow(icon: "mic",   label: "Say what you bought", sub: "Voice quick-add",               action: onVoice)
-                ScanMiniRow(icon: "plus",  label: "Add one item by hand",sub: "The slow way",                  action: onManual)
             }
             .padding(.top, 10)
         }

@@ -16,19 +16,35 @@ final class RecipeService {
     private var cachedKey: String? = nil
     private let supabase = LevlaSupabase.shared
 
-    /// Hash the fridge state in a way that's deterministic and ignores
-    /// ordering — same items in different order shouldn't re-fetch.
-    private func fridgeKey(_ items: [FoodItem]) -> String {
-        items
-            .map { "\($0.foodKey):\($0.status.rawValue):\($0.daysLeft)" }
-            .sorted()
-            .joined(separator: "|")
+    /// Hash the fridge state + profile in a way that's deterministic and
+    /// ignores ordering. Profile fields go into the key so swapping goals or
+    /// updating weight re-runs the suggestion.
+    private func cacheKey(items: [FoodItem], profile: Profile?) -> String {
+        let fridgeParts: [String] = items.map { item in
+            "\(item.foodKey):\(item.status.rawValue):\(item.daysLeft)"
+        }
+        let fridgePart: String = fridgeParts.sorted().joined(separator: "|")
+
+        let profilePart: String
+        if let p = profile {
+            let goalStr = p.goal?.rawValue ?? "-"
+            let actStr  = p.activityLevel?.rawValue ?? "-"
+            let sexStr  = p.sex?.rawValue ?? "-"
+            let kcalStr = p.dailyKcalGoal.map(String.init) ?? "-"
+            let protStr = p.dailyProteinGoal.map(String.init) ?? "-"
+            let dietStr = p.dietaryPrefs.sorted().joined(separator: ",")
+            profilePart = [goalStr, actStr, sexStr, kcalStr, protStr, dietStr]
+                .joined(separator: ":")
+        } else {
+            profilePart = "no-profile"
+        }
+        return fridgePart + "##" + profilePart
     }
 
-    /// Reload recipe ideas for the given fridge. Skips network if the fridge
-    /// hasn't changed since the last successful fetch.
-    func reload(for items: [FoodItem], force: Bool = false) async {
-        let key = fridgeKey(items)
+    /// Reload recipe ideas for the given fridge + profile. Skips network if
+    /// neither has changed since the last successful fetch.
+    func reload(for items: [FoodItem], profile: Profile? = nil, force: Bool = false) async {
+        let key = cacheKey(items: items, profile: profile)
         if !force, key == cachedKey, !recipes.isEmpty { return }
 
         if supabase.isOffline {
@@ -48,7 +64,10 @@ final class RecipeService {
         isLoading = true
         defer { isLoading = false }
 
-        let payload = SuggestRequest(fridge: items.map(WireItem.init))
+        let payload = SuggestRequest(
+            fridge: items.map(WireItem.init),
+            profile: profile.map(WireProfile.init)
+        )
 
         do {
             // Bypass the SDK's auto-decode so we can do permissive parsing
@@ -170,6 +189,7 @@ final class RecipeService {
 
     private struct SuggestRequest: Encodable {
         let fridge: [WireItem]
+        let profile: WireProfile?
     }
 
     private struct WireItem: Encodable {
@@ -185,6 +205,32 @@ final class RecipeService {
             self.qty = item.qty
             self.daysLeft = item.daysLeft
             self.status = item.status.rawValue
+        }
+    }
+
+    /// What the suggest-recipes Edge Function expects in `profile`:
+    /// only the fields it actually uses to tailor macros + cuisine.
+    private struct WireProfile: Encodable {
+        let sex: String?
+        let age: Int?
+        let heightCm: Int?
+        let weightKg: Double?
+        let goal: String?
+        let activityLevel: String?
+        let dailyKcalGoal: Int?
+        let dailyProteinGoal: Int?
+        let dietaryPrefs: [String]
+
+        init(_ p: Profile) {
+            self.sex = p.sex?.rawValue
+            self.age = p.age
+            self.heightCm = p.heightCm
+            self.weightKg = p.weightKg
+            self.goal = p.goal?.rawValue
+            self.activityLevel = p.activityLevel?.rawValue
+            self.dailyKcalGoal = p.dailyKcalGoal
+            self.dailyProteinGoal = p.dailyProteinGoal
+            self.dietaryPrefs = p.dietaryPrefs
         }
     }
 

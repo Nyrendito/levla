@@ -20,11 +20,11 @@ struct MainTabView: View {
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: $scanSheetOpen) {
             ScanSheetView(
-                onFridge:  { scanSheetOpen = false; presentedScan = .fridge },
-                onReceipt: { scanSheetOpen = false; presentedScan = .receipt },
-                onBarcode: { scanSheetOpen = false; presentedScan = .barcode },
-                onVoice:   { scanSheetOpen = false },
-                onManual:  { scanSheetOpen = false }
+                onFridge:   { scanSheetOpen = false; presentedScan = .fridge },
+                onReceipt:  { scanSheetOpen = false; presentedScan = .receipt },
+                onBarcode:  { scanSheetOpen = false; presentedScan = .barcode },
+                onVoice:    { scanSheetOpen = false },
+                onLogMeal:  { scanSheetOpen = false; app.presentingLogMeal = true }
             )
             .presentationDetents([.height(540)])
             .presentationCornerRadius(28)
@@ -36,6 +36,31 @@ struct MainTabView: View {
                 presentedScan = nil
             }
         }
+        // HomeView and other in-app surfaces can request a scan by setting
+        // `app.presentingScan` — mirror that into the local @State that drives
+        // the fullScreenCover.
+        .onChange(of: app.presentingScan) { _, new in
+            if let kind = new {
+                presentedScan = kind
+                app.presentingScan = nil
+            }
+        }
+        .sheet(isPresented: bindingProfile) {
+            ProfileView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .fullScreenCover(isPresented: bindingLogMeal) {
+            LogMealView { app.presentingLogMeal = false }
+        }
+    }
+
+    private var bindingProfile: Binding<Bool> {
+        Binding(get: { app.presentingProfile }, set: { app.presentingProfile = $0 })
+    }
+
+    private var bindingLogMeal: Binding<Bool> {
+        Binding(get: { app.presentingLogMeal }, set: { app.presentingLogMeal = $0 })
     }
 
     private var bindingTab: Binding<MainTab> {

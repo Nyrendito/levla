@@ -20,7 +20,8 @@ struct LevlaApp: App {
     }
 }
 
-/// Switches between auth and main app based on the AuthService state.
+/// Switches between auth, onboarding, and main app based on AuthService +
+/// profile state.
 struct RootView: View {
     @Environment(AppState.self) private var app: AppState
 
@@ -33,10 +34,16 @@ struct RootView: View {
             case .signedOut:
                 AuthView()
             case .signedIn:
-                MainTabView()
-                    .transition(.opacity)
+                if app.needsOnboarding {
+                    OnboardingView()
+                        .transition(.opacity)
+                } else {
+                    MainTabView()
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: app.auth.state)
+        .animation(.easeInOut(duration: 0.25), value: app.profileService.profile?.onboarded)
     }
 }

@@ -54,7 +54,7 @@ struct CookDeckView: View {
             RecipeDetailView(recipe: r) { openedRecipe = nil }
         }
         .task {
-            await app.recipes.reload(for: app.fridge.items)
+            await app.recipes.reload(for: app.fridge.items, profile: app.currentProfile)
         }
     }
 

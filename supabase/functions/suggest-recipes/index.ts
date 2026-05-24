@@ -1,74 +1,92 @@
-// supabase/functions/suggest-recipes — GPT-4.1-mini recipe generator w/ strict schema
+// supabase/functions/suggest-recipes — Returns 12 personalized recipes per
+// fridge + profile snapshot. Heavily biases toward 100% match against the
+// user's actual inventory. Pantry staples (salt/pepper/oil/butter/etc) are
+// assumed always-present and never flagged as missing.
 //
-// Body: { fridge: [{ foodKey, name, qty, daysLeft, status }, ...] }
-// Returns: { recipes: [Recipe, ...] }   (6 items, exact schema enforced)
+// Body: { fridge: [{foodKey,name,qty,daysLeft,status}], profile?: {sex,age,heightCm,weightKg,goal,activityLevel,dailyKcalGoal,dailyProteinGoal,dietaryPrefs}}
+// Returns: { recipes: Recipe[] }   (always exactly 12 if the model behaves)
 
 import { corsHeaders, json } from "./_shared/cors.ts";
-import {
-  recipesSchema, strictSchema, FOOD_KEYS, DIFFICULTIES, COLOR_HEXES,
-} from "./_shared/schemas.ts";
+import { recipesSchema, strictSchema, FOOD_KEYS, DIFFICULTIES, MEAL_TYPES, COLOR_HEXES } from "./_shared/schemas.ts";
 
-const SYSTEM_PROMPT = `You are Levla's recipe brain. The user gives you their
-current fridge inventory and you respond with exactly 6 recipes they could
-cook right now, prioritizing items that are expiring soonest.
+const PANTRY_STAPLES =
+  "salt, pepper, olive oil, butter, water, sugar, common dried spices, vinegar, neutral cooking oil, basic herbs";
 
-The output schema is enforced. You MUST:
-- Return EXACTLY 6 recipes (the array length is enforced by the consumer).
-- foodKey values in "uses" and "ingredients" MUST be one of: ${FOOD_KEYS.join(", ")}.
-- difficulty MUST be one of: ${DIFFICULTIES.join(", ")}.
-- colorHex / accentHex MUST be one of: ${COLOR_HEXES.join(", ")} (warm earth tones).
-- Each recipe MUST have 4-8 ingredients and 3-6 steps.
-- Sort recipes by cook-tonight value (most obviously-make-now first).
-- "why" is 1 short sentence explaining why this is a good pick.
-- "tags" are 1-3 short tags per recipe.
+function profileSummary(profile: any): string {
+  if (!profile || typeof profile !== "object") return "";
+  const parts: string[] = [];
+  if (profile.sex) parts.push(String(profile.sex));
+  if (typeof profile.age === "number") parts.push(`${profile.age} yrs`);
+  if (typeof profile.heightCm === "number") parts.push(`${profile.heightCm} cm`);
+  if (typeof profile.weightKg === "number") parts.push(`${profile.weightKg} kg`);
+  if (profile.activityLevel) parts.push(`activity: ${profile.activityLevel}`);
+  if (typeof profile.dailyKcalGoal === "number") parts.push(`~${profile.dailyKcalGoal} kcal/day target`);
+  if (typeof profile.dailyProteinGoal === "number") parts.push(`${profile.dailyProteinGoal}g protein/day`);
+  if (Array.isArray(profile.dietaryPrefs) && profile.dietaryPrefs.length > 0) {
+    parts.push(`dietary: ${profile.dietaryPrefs.join(", ")}`);
+  }
+  return parts.length ? `\nUser snapshot: ${parts.join(" · ")}.` : "";
+}
+
+function goalGuidance(goal: any): string {
+  if (!goal) return "";
+  return `\nThe user's goal is "${goal}". Tilt every recipe toward this goal:\n- lose_fat: high protein (35-50g per meal), moderate carbs, fibre-heavy, kcal 350-550 per meal.\n- gain_muscle: high protein (40-55g), generous complex carbs, kcal 550-800 per meal.\n- maintain: balanced macros, kcal 450-650 per meal.\n- general_health: balanced + nutrient-dense.`;
+}
+
+function systemPrompt(profile: any) {
+  return `You are Levla's recipe brain. The user gives you their current fridge inventory and you respond with 12 recipes covering a whole day.${profileSummary(profile)}${goalGuidance(profile?.goal)}
+
+The output schema is enforced.
+- Return EXACTLY 12 recipes.
+- 4 breakfast + 4 lunch + 4 dinner. Label each with mealType.
+- mealType must be one of: ${MEAL_TYPES.join(", ")}.
+- foodKey values in "uses" and "ingredients" MUST be from: ${FOOD_KEYS.join(", ")}.
+- IMPORTANT pantry assumption: the user ALREADY has these staples in the kitchen at all times, you NEVER need to flag them as missing or include them as 'to buy': ${PANTRY_STAPLES}. Map them all to foodKey "oil" if you need a foodKey slot.
+- difficulty: ${DIFFICULTIES.join(" / ")}.
+- colorHex / accentHex MUST be from: ${COLOR_HEXES.join(", ")}.
+- 4-8 ingredients per recipe, 3-6 steps.
+- HEAVILY favour recipes that use ONLY ingredients the user already has in their fridge. At least 6 of the 12 should be 100% match (use only items present + pantry staples). The rest can require 1-2 missing items max.
+- Within each meal type, sort by cook-tonight value (best match first).
+- "why" is 1 short sentence; if 100% match say "Made entirely from your fridge."; if the user has a goal, tie the reason to it.
+- tags: 1-3 short tags.
 - Steps are imperative, friendly, complete sentences.
+- Macros must be realistic per serving and aligned with the goal.
+- Breakfasts lighter and quicker (timeMinutes 5-20). Lunches medium (10-30). Dinners can be longer (15-45).
+- Respect dietaryPrefs (vegan, vegetarian, pescatarian, gluten_free, dairy_free, halal, kosher, low_carb, etc.) if provided — never include a forbidden ingredient.
 
-If the fridge has fewer than 3 ingredients, lean on pantry staples
-(oil, pasta, rice, bread) but stay within the foodKey list above.
-If the fridge is completely empty, still return 6 simple recipes the
-user could make with basic ingredients.`;
+If fridge has fewer than 3 items, lean entirely on pantry staples.`;
+}
 
 interface IncomingItem {
   foodKey?: string;
   name?: string;
   qty?: string;
-  daysLeft?: number;
-  status?: string;
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) return json({ error: "OPENAI_API_KEY not set" }, { status: 500 });
 
     const body = await req.json();
     const fridge: IncomingItem[] = Array.isArray(body?.fridge) ? body.fridge : [];
+    const profile = body?.profile ?? null;
 
     const summary = fridge.length === 0
       ? "The user's fridge is empty."
-      : "The user's fridge contains:\n" + fridge.map((i) => {
-          const status = i.status ? ` (${i.status})` : "";
-          const days = typeof i.daysLeft === "number" ? `, ${i.daysLeft} days left` : "";
-          return `- ${i.name || i.foodKey}${i.qty ? ` (${i.qty})` : ""}${status}${days}`;
-        }).join("\n");
+      : "The user's fridge contains:\n" + fridge.map((i) => `- ${i.name || i.foodKey}${i.qty ? ` (${i.qty})` : ""}`).join("\n");
 
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: "gpt-4.1-mini",
         temperature: 0.7,
         response_format: strictSchema("recipe_set", recipesSchema),
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: summary + "\n\nReturn 6 recipes." },
+          { role: "system", content: systemPrompt(profile) },
+          { role: "user", content: summary + "\n\nReturn 12 recipes: 4 breakfast, 4 lunch, 4 dinner." },
         ],
       }),
     });
@@ -82,12 +100,9 @@ Deno.serve(async (req: Request) => {
     const raw = completion?.choices?.[0]?.message?.content ?? "{}";
 
     let parsed: { recipes?: unknown } = {};
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+    try { parsed = JSON.parse(raw); } catch {
       return json({ error: "openai_returned_invalid_json", raw }, { status: 502 });
     }
-
     return json({ recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [] });
   } catch (e) {
     return json({ error: String(e) }, { status: 500 });

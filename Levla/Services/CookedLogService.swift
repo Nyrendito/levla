@@ -86,6 +86,41 @@ final class CookedLogService {
         }
     }
 
+    /// Log a Cal-AI-style snapped meal. No recipe slug — we use the title the
+    /// vision model returned and a stable synthetic slug so the row obeys the
+    /// schema's NOT NULL.
+    func logSnapped(meal: AnalyzedMeal, userId: UUID) async {
+        let synthSlug = "snap-" + meal.name
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        let entry = CookedEntry(
+            userId: userId,
+            recipeSlug: synthSlug.isEmpty ? "snap-meal" : synthSlug,
+            recipeTitle: meal.name,
+            servings: 1,
+            kcal:    meal.kcal,
+            protein: meal.protein,
+            carbs:   meal.carbs,
+            fat:     meal.fat,
+            cookedAt: Date()
+        )
+
+        if supabase.isOffline {
+            offlineStore.append(entry)
+            todayEntries = offlineStore.filter { isToday($0.cookedAt) }
+            return
+        }
+
+        guard let client = supabase.client else { return }
+        do {
+            try await client.from("cooked_entries").insert(entry).execute()
+            await reloadToday(userId: userId)
+        } catch {
+            // soft fail
+        }
+    }
+
     // MARK: - Helpers
 
     private func isToday(_ date: Date) -> Bool {

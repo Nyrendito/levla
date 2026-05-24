@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class AppState {
     let auth = AuthService()
+    let profileService = ProfileService()
     let fridge = FridgeService()
     let shopping = ShoppingService()
     let recipes = RecipeService()
@@ -14,32 +15,51 @@ final class AppState {
 
     var selectedTab: MainTab = .home
     var presentingScan: ScanKind? = nil
+    var presentingProfile: Bool = false
+    var presentingLogMeal: Bool = false
+
+    /// True only when we have a confirmed signed-in user whose profile is
+    /// known to NOT be onboarded yet. (`nil` profile is fine — we just haven't
+    /// loaded it; we don't want to flash the onboarding screen.)
+    var needsOnboarding: Bool {
+        guard auth.currentUserId != nil else { return false }
+        guard let p = profileService.profile else { return false }
+        return !p.onboarded
+    }
+
+    /// The active profile — prefer ProfileService's row, fall back to whatever
+    /// AuthService loaded at bootstrap, so the UI never flickers blank.
+    var currentProfile: Profile? {
+        profileService.profile ?? auth.profile
+    }
 
     /// Once the user is signed in we hydrate the services that depend on a userId.
     func hydrate() async {
         await auth.bootstrap()
         if let uid = auth.currentUserId {
+            async let p: Void = profileService.reload(userId: uid)
             async let f: Void = fridge.reload(userId: uid)
             async let s: Void = shopping.reload(userId: uid)
             async let c: Void = cooked.reloadToday(userId: uid)
-            _ = await (f, s, c)
-            await recipes.reload(for: fridge.items)
+            _ = await (p, f, s, c)
+            await recipes.reload(for: fridge.items, profile: currentProfile)
         }
     }
 
     func refreshForUser() async {
         guard let uid = auth.currentUserId else { return }
+        async let p: Void = profileService.reload(userId: uid)
         async let f: Void = fridge.reload(userId: uid)
         async let s: Void = shopping.reload(userId: uid)
         async let c: Void = cooked.reloadToday(userId: uid)
-        _ = await (f, s, c)
-        await recipes.reload(for: fridge.items)
+        _ = await (p, f, s, c)
+        await recipes.reload(for: fridge.items, profile: currentProfile)
     }
 
     /// Called after a scan adds items — refresh shopping & recipe suggestions
     /// since both depend on the current fridge.
     func refreshAfterFridgeChange() async {
-        await recipes.reload(for: fridge.items)
+        await recipes.reload(for: fridge.items, profile: currentProfile)
     }
 }
 

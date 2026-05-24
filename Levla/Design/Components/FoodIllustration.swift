@@ -130,9 +130,12 @@ struct FoodTile: View {
 
     var body: some View {
         let f = FoodPalette.palette(for: food)
+        // Request a variant tailored to the rendered size so we don't
+        // download a 1024px PNG for a 40pt tile.
+        let displayURL = ImageVariants.resized(imageURL, targetPoints: size)
         ZStack {
-            if let imageURL {
-                AsyncImage(url: imageURL) { phase in
+            if let displayURL {
+                AsyncImage(url: displayURL) { phase in
                     switch phase {
                     case .success(let img):
                         img.resizable().scaledToFill()
@@ -150,8 +153,6 @@ struct FoodTile: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .task {
-            // Best-effort. Returns nil instantly in offline / no-image-gen
-            // setups so we keep rendering the illustration with zero cost.
             if imageURL == nil {
                 imageURL = await ImageCacheService.shared.imageURL(kind: .food, key: food)
             }
@@ -159,8 +160,9 @@ struct FoodTile: View {
     }
 }
 
-/// FoodOrb — hero food art for recipe cards & detail. One large primary
-/// orb + supporting smaller orbs over a warm wash.
+/// FoodOrb — hero food art for recipe cards & detail. When a generated
+/// image URL is provided it displays that; otherwise renders abstract
+/// orbs over a warm wash.
 struct FoodOrb: View {
     let foods: [String]
     let color: Color
@@ -168,8 +170,29 @@ struct FoodOrb: View {
     var height: CGFloat = 280
     var radius: CGFloat = L.R.xxl
     var label: String? = nil
+    var imageURL: URL? = nil
 
     var body: some View {
+        if let imageURL {
+            let displayURL = ImageVariants.resized(imageURL, targetPoints: height)
+            AsyncImage(url: displayURL) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                        .frame(height: height)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                default:
+                    fallback
+                }
+            }
+        } else {
+            fallback
+        }
+    }
+
+    @ViewBuilder
+    private var fallback: some View {
         let arr = foods.isEmpty ? ["tomato"] : foods
         ZStack {
             color
