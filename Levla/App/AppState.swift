@@ -14,12 +14,14 @@ final class AppState {
     let cooked = CookedLogService()
     let weightLog = WeightLogService()
     let water = WaterLogService()
+    let store = StoreService()
 
     var selectedTab: MainTab = .home
     var presentingScan: ScanKind? = nil
     var presentingProfile: Bool = false
     var presentingLogMeal: Bool = false
     var presentingShopping: Bool = false
+    var presentingPaywall: Bool = false
 
     /// True only when we have a confirmed signed-in user whose profile is
     /// known to NOT be onboarded yet. (`nil` profile is fine — we just haven't
@@ -38,6 +40,12 @@ final class AppState {
 
     /// Once the user is signed in we hydrate the services that depend on a userId.
     func hydrate() async {
+        // Load subscription products + entitlements up front so the paywall
+        // opens instantly and gated features know Pro status on launch. Runs
+        // independently of auth — StoreKit is tied to the Apple ID, not our
+        // account.
+        Task { await store.bootstrap() }
+
         await auth.bootstrap()
         if let uid = auth.currentUserId {
             async let p: Void  = profileService.reload(userId: uid)

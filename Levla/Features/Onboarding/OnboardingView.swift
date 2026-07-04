@@ -293,6 +293,12 @@ struct OnboardingView: View {
         await app.recipes.reload(for: app.fridge.items, profile: app.currentProfile, force: true)
 
         withAnimation { generatingPlan = false }
+
+        // First run lands on the Pro paywall (unless they already subscribe).
+        // RootView presents it as a full-screen cover over the main app.
+        if !app.store.isPro {
+            app.presentingPaywall = true
+        }
     }
 }
 

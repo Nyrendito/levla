@@ -72,5 +72,12 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: app.auth.state)
         .animation(.easeInOut(duration: 0.25), value: app.profileService.profile?.onboarded)
+        .fullScreenCover(isPresented: paywallBinding) {
+            PaywallView { app.presentingPaywall = false }
+        }
+    }
+
+    private var paywallBinding: Binding<Bool> {
+        Binding(get: { app.presentingPaywall }, set: { app.presentingPaywall = $0 })
     }
 }

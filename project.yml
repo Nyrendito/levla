@@ -28,6 +28,7 @@ targets:
       - path: Levla
         excludes:
           - "**/*.md"
+          - "**/*.storekit"
     resources:
       - path: Levla/Assets.xcassets
       - path: Levla/Design/Fonts
@@ -72,3 +73,23 @@ targets:
     dependencies:
       - package: Supabase
         product: Supabase
+
+schemes:
+  Levla:
+    build:
+      targets:
+        Levla: all
+    run:
+      config: Debug
+      # Drives the paywall in the simulator without App Store Connect. Edit
+      # Levla.storekit (or delete a product from it) to reproduce the
+      # "one plan not yet approved" case — the paywall still loads the rest.
+      storeKitConfiguration: Levla/Levla.storekit
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
